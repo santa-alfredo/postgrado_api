@@ -119,6 +119,7 @@ class EnfermedadCronica(BaseModel):
     lugaresTratamiento: Literal["clinicaPrivada", "publica", "iess", "otro"]
 
 class FichaSocioeconomicaSchema(BaseModel):
+    cllc_cdg: int # primary key
     nombres: str = Field(..., min_length=2, max_length=50)
     cedula: str = Field(..., min_length=10, max_length=13)
     fechaNacimiento: date = Field(...)

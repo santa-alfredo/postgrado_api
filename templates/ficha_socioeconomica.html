@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ficha Socioeconómica</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 10px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 15px;
+        }
+        .section-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .field {
+            margin-bottom: 5px;
+        }
+        .field-label {
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        /* Paginación: número de página en el pie de página */
+        @page {
+            margin-bottom: 50px;  /* espacio para el pie de página */
+        }
+        /* Membrete en la primera página */
+        .membrete {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #000; /* Línea que separa el membrete del contenido */
+            padding-bottom: 20px;
+            margin-bottom: 30px; /* Espacio debajo del membrete */
+        }
+
+        /* Logo de la universidad */
+        .membrete .logo img {
+            width: 100px; /* Ajusta el tamaño según el logo */
+            height: auto;
+        }
+
+        /* Título del documento */
+        .membrete .titulo h1 {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            flex-grow: 1;
+        }
+
+        /* Foto del estudiante */
+        .membrete .foto img {
+            width: 60px; /* Ajusta el tamaño de la foto */
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        footer {
+            position: fixed;
+            bottom: 5mm;
+            right: 5mm;
+            text-align: right;
+            font-size: 10pt;
+            color: #000;
+        }
+
+        footer .page-number::after {
+            content: "Pág. " counter(page) " de " counter(pages);
+        }
+    </style>
+</head>
+<body>
+    <!-- Membrete en la primera página -->
+    <div class="membrete">
+        <div class="logo">
+          <img src="http://localhost:8000/static/logo/avatar.png" alt="Logo Universidad" />
+        </div>
+        <div class="titulo">
+          <h1>Ficha Socioeconómica</h1>
+        </div>
+        <div class="foto">
+          <img src="https://cdn2.iconfinder.com/data/icons/circle-avatars-1/128/050_girl_avatar_profile_woman_suit_student_officer-512.png" alt="Foto del estudiante" />
+        </div>
+    </div>
+
+    <footer>
+        <div class="page-number"></div>
+    </footer>
+
+    <h1>Ficha Socioeconómica</h1>
+
+    <div class="section">
+        <h2>Información Personal</h2>
+        <div class="info-grid">
+            <strong>Nombre:</strong> <span>{{estudiante.nombre}}</span>
+            <strong>Cédula:</strong> <span>{{estudiante.cedula}}</span>
+            <strong>Edad:</strong> <span>{{estudiante.edad}}</span>
+            <strong>Dirección:</strong> <span>{{estudiante.direccion}}</span>
+            <strong>Teléfono:</strong> <span>{{estudiante.telefono}}</span>
+            <strong>Correo:</strong> <span>{{estudiante.correo}}</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Información Académica</h2>
+        <div class="info-grid">
+            <strong>Nivel Académico:</strong> <span>{{estudiante.nivel_academico}}</span>
+            <strong>Institución:</strong> <span>{{estudiante.institucion}}</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Historial de Salud</h2>
+        <div class="info-grid">
+            <strong>Discapacidad:</strong> <span>{{estudiante.discapacidad}}</span>
+            <strong>Enfermedad Crónica:</strong> <span>{{estudiante.enfermedad_cronica}}</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Miembros del Hogar</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Parentesco</th>
+                    <th>Edad</th>
+                    <th>Instrucción</th>
+                    <th>Ocupación</th>
+                    <th>Sueldo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in miembros_hogar %}
+                <tr>
+                    <td>{{m.nombre}}</td>
+                    <td>{{m.parentesco}}</td>
+                    <td>{{m.edad}}</td>
+                    <td>{{m.instruccion}}</td>
+                    <td>{{m.ocupacion}}</td>
+                    <td>${{m.sueldo}}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Información Económica</h2>
+        <div class="info-grid">
+                <strong>Ingresos Totales:</strong> <span>${{ingresos_totales}}</span>
+            <strong>Gastos Básicos:</strong>
+            <div>
+                {% for key, value in gastos_basicos.items() %}
+                    <div>{{key.capitalize()}}: ${{value}}</div>
+                {% endfor %}
+                <div class='summary'>Total Gastos: ${{gastos_totales}}</div>
+            </div>
+            <strong>Balance:</strong> <span>${{balance}}</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Información Laboral del Estudiante</h2>
+        <div class="info-grid">
+            <strong>Trabaja:</strong> <span>{% if estudiante.trabaja %}Sí{% else %}No{% endif %}</span>
+            {% if estudiante.trabaja %}
+                <strong>Empresa:</strong> <span>{{estudiante.empresa}}</span>
+                <strong>Cargo:</strong> <span>{{estudiante.cargo}}</span>
+                <strong>Sueldo:</strong> <span>${{estudiante.sueldo_estudiante}}</span>
+            {% endif %}
+            <strong>Negocio Propio:</strong> <span>{% if estudiante.negocio_propio %}Sí{% else %}No{% endif %}</span>
+        </div>
+    </div>
+</body>
+</html> 

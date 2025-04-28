@@ -7,21 +7,18 @@ from database import get_connection
 import cx_Oracle
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Simular base de datos
-FAKE_DB = {
-    "name": "11787",
-    "email": "diana.calderon@est.umet.edu.ec",
-    "password": "1234"  # Debes usar hash real
-}
-
-def get_user_from_token(request: Request) -> User | None:
+def get_user_from_token(request: Request) -> User:
     token = request.cookies.get(COOKIE_NAME)
     if not token:
-        return None
+        raise HTTPException(status_code=401, detail="Token faltante")
     data = decode_jwt(token)
     if not data:
-        return None
-    return User(name=data["cllc_cdg"], email=data["email"])
+        raise HTTPException(status_code=401, detail="Token inválido")
+    return User(username=data["username"], email=data["email"])
+
+@router.get("/me")
+async def me(user: User = Depends(get_user_from_token)):
+    return {"user": user}
 
 @router.post("/login")
 async def login(response: Response, form: LoginForm = Body(...), conn: cx_Oracle.Connection = Depends(get_connection)):
@@ -48,7 +45,7 @@ async def login(response: Response, form: LoginForm = Body(...), conn: cx_Oracle
         if not verify_password(form.password, hashed_password) and False:
             raise HTTPException(status_code=401, detail="Credenciales inválidas")
         
-        token = create_jwt({"email": email, "cllc_cdg": username})
+        token = create_jwt({"email": email, "username": username})
         response.set_cookie(
             key=COOKIE_NAME,
             value=token,
@@ -57,7 +54,7 @@ async def login(response: Response, form: LoginForm = Body(...), conn: cx_Oracle
             samesite="Lax",
             path="/"
         )
-        return {"user": {"email": email, "name": username}}
+        return {"user": {"email": email, "username": username}}
     
     except cx_Oracle.DatabaseError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -82,13 +79,6 @@ async def login_with_token(data: TokenForm, response: Response):
         path="/"
     )
     return {"message": "Token establecido"}
-
-@router.get("/me")
-async def me(request: Request):
-    user = get_user_from_token(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="No autenticado")
-    return {"user": user}
 
 @router.post("/logout")
 async def logout(response: Response):

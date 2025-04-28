@@ -3,12 +3,15 @@ from schemas import Cliente
 import os
 from database import get_connection
 import cx_Oracle
+from auth import get_user_from_token
+from schemas import User
+
 router = APIRouter(prefix="/cliente", tags=["cliente"])
 
-@router.get("/{cllc_cdg}")
+@router.get("/me")
 async def cliente_obtener(
-    cllc_cdg: int,
-    conn: cx_Oracle.Connection = Depends(get_connection)
+    conn: cx_Oracle.Connection = Depends(get_connection),
+    user: User = Depends(get_user_from_token)
 ):
     try:
         cursor = conn.cursor()
@@ -17,7 +20,7 @@ async def cliente_obtener(
         from sigac.cliente_local
         where cllc_cdg = :cllc_cdg
         """
-        cursor.execute(sql, {"cllc_cdg": cllc_cdg})
+        cursor.execute(sql, {"cllc_cdg": user.username})
         row = cursor.fetchone()
         if row is None:
             return {

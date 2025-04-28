@@ -1,11 +1,13 @@
 from fastapi import FastAPI, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
 from auth import router as auth_router
 from fichasocioeconomica import router as ficha_socioeconomica_router
 from cliente import router as cliente_router
 app = FastAPI()
 
-
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # Permitir solicitudes desde tu dominio (ajusta esto según Cloudflare)
 app.add_middleware(
     CORSMiddleware,

@@ -5,7 +5,7 @@ from pydantic.v1 import validator
 import re
 
 class User(BaseModel):
-    name: str
+    username: str
     email: EmailStr
 
 class LoginForm(BaseModel):
@@ -119,7 +119,7 @@ class EnfermedadCronica(BaseModel):
     lugaresTratamiento: Literal["clinicaPrivada", "publica", "iess", "otro"]
 
 class FichaSocioeconomicaSchema(BaseModel):
-    cllc_cdg: int # primary key
+    cllc_cdg: Optional[int] = None # primary key
     nombres: str = Field(..., min_length=2, max_length=50)
     cedula: str = Field(..., min_length=10, max_length=13)
     fechaNacimiento: date = Field(...)

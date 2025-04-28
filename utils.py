@@ -7,6 +7,7 @@ from passlib.hash import django_pbkdf2_sha256, django_bcrypt, django_argon2, dja
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+REFRESH_SECRET_KEY = os.getenv("REFRESH_SECRET_KEY")
 ALGORITHM = "HS256"
 COOKIE_NAME = "access_token"
 
@@ -15,6 +16,12 @@ def create_jwt(data: dict, expires_delta: timedelta = timedelta(hours=2)):
     expire = datetime.utcnow() + expires_delta
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def create_refresh_token(data: dict, expires_delta: timedelta = timedelta(days=30)):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
 
 def decode_jwt(token: str):
     from jose import JWTError

@@ -33,22 +33,49 @@ async def crear_ficha_socioeconomica(
         mapa_campos = {
             "fechaNacimiento": "fis_fecha_nac",
             "estadoCivil": "fis_estado_civil",
-            "telefono": "fis_telefono",
-            "promedio": "fis_calif_grado",
-            "semestre": "fis_semestre_matricula",
-            "situacionLaboral": "fis_situacion_lab",
+            "telefono": "fis_celular",
+            "nacionalidad": "fis_nacionalidad",
+            
+            "tieneDiscapacidad": "fis_discapacidad",
+            "discapacidad.tipo": "fis_tip_disc",
+            "discapacidad.porcentaje": "fis_porc_disc",
+            "discapacidad.carnet": "fis_nro_carnet",
+            "enfermedadCronica.nombre": "fis_enfer_present",
+            
             "relacionCompa": "fis_relac_companeros",
             "relacionDocente": "fis_relac_docentes",
             "relacionPadres": "fis_relac_padres",
-            "estadoFamiliar": "fis_estado_civil_padres",
-            "tieneDiscapacidad": "fis_discapacidad",
+            "relacionPareja": "fis_relac_pareja",
+
             "cambioResidencia": "fis_tuvo_camb_resi",
             "direccion": "fis_direccion",
             "provinciaId": "fis_provincia",
             "ciudadId": "fis_ciudad",
             "parroquiaId": "fis_parroquia",
-            "discapacidad.tipo": "fis_tip_disc",
-            "discapacidad.porcentaje": "fis_porc_disc",
+            
+            "colegio": "fis_cole_graduo",
+            "tipoColegio": "fis_cole_tipo",
+            "promedio": "fis_calif_grado",
+
+            "carrera": "fis_carrera_matricula",
+            "semestre": "fis_semestre_matricula",
+            "beca": "fis_beca",
+            "estudioOtraUniversidad": "fis_est_otr_u",
+            "otraUniversidad.razon": "fis_raz_camb_u",
+
+            "situacionLaboral": "fis_situacion_lab",
+            "dependenciaEconomica": "fis_dependencia_economica",
+            "laboral.dependiente": "fis_vive_con",
+            "internet": "fis_tiene_internet",
+            "computadora": "fis_tiene_compu",
+            "cabezaHogar": "fis_cabeza_familia",
+            "academicoPadre": "fis_instruccion_padre",
+            "academicoMadre": "fis_instruccion_madre",
+            "ingresosPadreMadre": "fis_ingreso_padres",
+            "sueldoPadre": "fis_sueldo_padre",
+            "sueldoMadre": "fis_sueldo_madre",
+            "etnia": "fis_recono_etnico",
+            "indigenaNacionalidad": "nac_codigo",
         }
         
         cursor = conn.cursor()
@@ -118,7 +145,8 @@ async def crear_ficha_socioeconomica(
 
         return {
             "message": "Ficha socioeconómica actualizada correctamente",
-            "ficha": {"id": user.username}
+            # "ficha": {"id": user.username}
+            "ficha": None
         }
 
     except Exception as e:

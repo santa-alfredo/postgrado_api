@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Response, HTTPException, Depends, Body
+from fastapi import APIRouter, Request, Response, HTTPException, Depends, Body, Query
 from fastapi.responses import StreamingResponse
 from schemas import FichaSocioeconomicaSchema
 import os, io
@@ -11,6 +11,8 @@ from weasyprint import HTML
 from jinja2 import Environment, FileSystemLoader
 import tempfile
 from dotenv import load_dotenv
+from typing import Optional
+
 load_dotenv()
 
 router = APIRouter(prefix="/ficha", tags=["ficha"])
@@ -165,8 +167,12 @@ async def get_ficha_socioeconomica(
 
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT * FROM sna.sna_ficha_socioeconomica 
-            WHERE cllc_cdg = :cllc_cdg
+            SELECT fi.*, cl.cllc_nmb, cl.cllc_ruc, cl.cllc_email_univ, cl.cllc_email, cl.cllc_fecha_nac, al.alu_genero,
+                       cl.cllc_celular
+            FROM sna.sna_ficha_socioeconomica fi
+            JOIN sigac.cliente_local cl on cl.cllc_cdg = fi.cllc_cdg
+            JOIN sna.sna_alumno al on al.cllc_cdg = fi.cllc_cdg
+            WHERE cl.cllc_cdg = :cllc_cdg
             order by fis_pel_codigo DESC
         """, {"cllc_cdg": user.username})
         row = cursor.fetchone()
@@ -177,10 +183,70 @@ async def get_ficha_socioeconomica(
                 "periodo": False
             }
         ficha = dict(zip([col[0].lower() for col in cursor.description], row))
+
+        cursor.execute("""
+            SELECT DISTINCT tb.tib_descripcion
+                FROM SNA.SNA_BECA B,sna.sna_tipo_beca tb
+                WHERE B.CLLC_CDG = :cllc_cdg 
+                AND B.PEL_CODIGO = :pel_codigo
+                AND B.BEC_ELIMINADO = 'N'
+                AND B.BEC_APROBACION_VICERRECTOR = 'A'
+                AND B.SED_CODIGO_PREFACTURA IN (1,2,3)
+                AND B.tib_codigo_concede  = tb.tib_codigo
+                and  ROWNUM = 1
+        """, {"cllc_cdg": user.username, "pel_codigo": periodo})
+        row = cursor.fetchone()
+        if row is None:
+            beca = None
+        else:
+            beca = row[0]
+
+        cursor.execute("""
+            SELECT ip.car_codigo_postgrado,prp_titulo_proyecto
+            FROM sna.sna_inscripcion_postgrado ip,sna.sna_proyecto_postgrado pp
+            WHERE ip.cllc_cdg = :cllc_cdg
+            AND ip.inp_pagado = 'S'
+            AND ip.inp_aprobado = 'S'
+            AND ip.inp_eliminado = 'N'
+            AND ip.prp_numero_postgrado = pp.prp_numero
+            AND ip.fac_codigo_postgrado = pp.fac_codigo
+            AND ip.car_codigo_postgrado = pp.car_codigo
+            AND  ROWNUM = 1
+        """, {"cllc_cdg": user.username})
+        row = cursor.fetchone()
+        if row is None:
+            carrera = {
+                "id": None,
+                "nombre": None
+            }
+        else:
+            carrera = {
+                "id": row[0],
+                "nombre": row[1]
+            }
+        
+        if isinstance(ficha["cllc_fecha_nac"], datetime):
+            ficha["cllc_fecha_nac"] = ficha["cllc_fecha_nac"].strftime("%d/%m/%Y")
+        ficha = {
+            "nombres": ficha["cllc_nmb"],
+            "cedula": ficha["cllc_ruc"],
+            "periodo": ficha["fis_pel_codigo"],
+            "email": ficha["cllc_email_univ"] or ficha["cllc_email"],
+            "fechaNacimiento": ficha["cllc_fecha_nac"],
+            "genero": ficha["alu_genero"],
+            "estadoCivil": ficha["fis_estado_civil"],
+            "nacionalidad": ficha["fis_nacionalidad"] or "ecuatoriano",
+            "telefono": ficha["cllc_celular"],
+            "colegio": ficha["fis_cole_graduo"] or 0,
+            "tipoColegio": ficha["fis_cole_tipo"] or 0,
+            "indigenaNacionalidad": ficha["nac_codigo"] or 34,
+            "beca": beca,
+            "carrera": carrera
+        }
         return {
             "message": "Ficha socioeconómica encontrada",
-            "ficha": {"id": user.username},
-            "periodo": periodo == int(ficha["fis_pel_codigo"] or 0)
+            "ficha": ficha,
+            "periodo": periodo == int(ficha["periodo"] or 0)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -279,3 +345,141 @@ async def get_ficha_socioeconomica_pdf(
     finally:
         print("finally")
         # cursor.close()
+
+@router.get("/colegio")
+def search_colegios(
+    search: Optional[str] = Query(default="", min_length=0),
+    tipo: Optional[str] = Query(default=None),
+    conn: cx_Oracle.Connection = Depends(get_connection)  # ✅ correcto aquí
+):
+    try:
+        cursor = conn.cursor()
+        base_query = """
+            SELECT 
+                ie.ine_codigo, 
+                ie.ine_descripcion, 
+                tie.tie_descripcion,
+                tie.tie_codigo
+            FROM 
+                sna.sna_institucion_educativa ie
+            JOIN 
+                sna.sna_tipo_institucion_educativa tie 
+                ON ie.tie_codigo = tie.tie_codigo
+            WHERE 
+                ie.ine_tipo_institucion <> 'UNIVERSIDAD'
+                AND LOWER(ie.ine_descripcion) LIKE :search
+        """
+        params = {"search": f"%{search.lower()}%"}
+
+        # if tipo:
+        #     base_query += " AND LOWER(tie.tie_descripcion) = :tipo"
+        #     params["tipo"] = 'particular'
+
+        cursor.execute(base_query, params)
+        rows = cursor.fetchall()
+
+        columns = [col[0].lower() for col in cursor.description]
+        colegios = [dict(zip(columns, row)) for row in rows]
+
+        return colegios
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error buscando colegios: {str(e)}")
+    finally:
+        cursor.close()
+
+@router.get("/colegio/{ine_codigo}")
+def get_colegio(
+    ine_codigo: int,
+    conn: cx_Oracle.Connection = Depends(get_connection)
+):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ie.ine_codigo, ie.ine_descripcion, tie.tie_codigo, tie.tie_descripcion 
+            FROM sna.sna_institucion_educativa ie
+            JOIN sna.sna_tipo_institucion_educativa tie ON ie.tie_codigo = tie.tie_codigo
+            WHERE ie.ine_codigo = :ine_codigo
+        """, {"ine_codigo": ine_codigo})
+        row = cursor.fetchone()
+        if row is None:
+            return {
+                "message": "Colegio no encontrado",
+            }
+        return {
+            "ine_codigo": row[0],
+            "ine_descripcion": row[1],
+            "tie_codigo": row[2],
+            "tie_descripcion": row[3]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo el colegio: {str(e)}")
+    finally:
+        cursor.close()
+
+
+@router.get("/provincias")
+def get_provincias(
+    conn: cx_Oracle.Connection = Depends(get_connection)
+):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT area_nombre as nombre,area_codigo as id
+            FROM   easi.area_geografica
+            WHERE  area_tipo   = 'PR'
+            AND area_padre='593'
+        """)
+        rows = cursor.fetchall()
+        columns = [col[0].lower() for col in cursor.description]
+        provincias = [dict(zip(columns, row)) for row in rows]
+        return provincias
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo las provincias: {str(e)}")
+    finally:
+        cursor.close()
+
+
+@router.get("/ciudades")
+def get_ciudades(
+    provinciaId: int,
+    conn: cx_Oracle.Connection = Depends(get_connection)
+):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT area_nombre as nombre,area_codigo as id
+            FROM   easi.area_geografica
+            WHERE  area_tipo   = 'CI'
+            AND area_padre=:provinciaId
+        """, {"provinciaId": provinciaId})
+        rows = cursor.fetchall()
+        columns = [col[0].lower() for col in cursor.description]
+        ciudades = [dict(zip(columns, row)) for row in rows]
+        return ciudades
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo las ciudades: {str(e)}")
+    finally:
+        cursor.close()
+
+@router.get("/parroquias")
+def get_parroquias(
+    ciudadId: str,
+    conn: cx_Oracle.Connection = Depends(get_connection)
+):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT area_nombre as nombre,area_codigo as id
+            FROM   easi.area_geografica
+            WHERE  area_tipo   = 'CM'
+            AND area_padre=:ciudadId
+        """, {"ciudadId": ciudadId})
+        rows = cursor.fetchall()
+        columns = [col[0].lower() for col in cursor.description]
+        parroquias = [dict(zip(columns, row)) for row in rows]
+        return parroquias
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo las parroquias: {str(e)}")
+    finally:
+        cursor.close()

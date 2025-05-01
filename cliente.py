@@ -16,9 +16,10 @@ async def cliente_obtener(
     try:
         cursor = conn.cursor()
         sql = """
-        select cllc_cdg, cllc_ruc, cllc_nmb, cllc_email, cllc_celular
-        from sigac.cliente_local
-        where cllc_cdg = :cllc_cdg
+        select cllc_nmb, cllc_ruc, cllc_celular, cllc_email, cllc_fecha_nac, alu_genero
+        from sigac.cliente_local cl
+        join sna.sna_alumno al on al.cllc_cdg = cl.cllc_cdg
+        where cl.cllc_cdg = :cllc_cdg
         """
         cursor.execute(sql, {"cllc_cdg": user.username})
         row = cursor.fetchone()

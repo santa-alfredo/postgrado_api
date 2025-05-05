@@ -84,9 +84,9 @@ class OtraUniversidad(BaseModel):
 
 class Empleado(BaseModel):
     tipo: Literal["empleado"] = "empleado"
-    empresa: str = Field(..., min_length=2, max_length=100)
-    cargo: str = Field(..., min_length=2, max_length=100)
-    sueldo: float = Field(..., ge=0, le=1000000)
+    empresa: str = Field(..., min_length=1, max_length=100)
+    cargo: str = Field(..., min_length=1, max_length=100)
+    sueldo: str = Field(..., min_length=1, max_length=100)
 
 class NegocioPropio(BaseModel):
     tipo: Literal["negocio propio"] = "negocio propio"
@@ -109,8 +109,8 @@ class Desempleado(BaseModel):
     dependiente: Literal["padre", "madre", "hermano", "otro"]
 
 class MiembroFamiliar(BaseModel):
-    sueldo: float = Field(..., ge=0)
-    edad: int = Field(..., ge=1, le=100)
+    sueldo: str = ""
+    edad: str = ""
     parentesco: Literal["hijo", "padre", "madre", "hermano", "conyuge", "otro"]
     ocupacion: Optional[str] = None
 
@@ -123,72 +123,79 @@ class EnfermedadCronica(BaseModel):
     nombre: str = Field(...)
     lugaresTratamiento: Literal["clinicaPrivada", "publica", "iess", "otro"]
 
+class Colegio(BaseModel):
+    value: str
+    label: str
+    tipoValue: str
+    tipoLabel: str
+
+    class Config:
+        min_anystr_length = 1
+        anystr_strip_whitespace = True
+
 class FichaSocioeconomicaSchema(BaseModel):
     cllc_cdg: Optional[int] = None # primary key
     nombres: str = Field(..., min_length=2, max_length=50)
     cedula: str = Field(..., min_length=10, max_length=13)
-    fechaNacimiento: date = Field(...)
+    fechaNacimiento: Optional[date] = None
     genero: str = Field(...)
     estadoCivil: str = Field(..., max_length=20)
     telefono: Optional[str] = Field(None, min_length=10, max_length=15)
     email: str = Field(...)
     nacionalidad: str = Field(..., max_length=30)
-    cambioResidencia: Optional[bool] = None
+    cambioResidencia: Optional[str] = "N"
     direccion: str = Field(..., min_length=10, max_length=200)
     provinciaId: str = Field(...)
     ciudadId: str = Field(...)
     parroquiaId: str = Field(...)
     carrera: str = Field(..., min_length=2, max_length=100)
-    colegio: str = Field(..., min_length=2, max_length=100)
+    colegio: Colegio = Field(...)
     tipoColegio: str = Field(..., max_length=20)
     anioGraduacion: int = Field(..., ge=1900, le=2025)
     semestre: str = Field(..., pattern=r"^\d+$")
     promedio: float = Field(..., ge=0, le=10)
     estudioOtraUniversidad: bool = Field(...)
     otraUniversidad: Optional[OtraUniversidad] = None
-    beca: Optional[bool] = None
-    internet: Optional[bool] = None
-    computadora: Optional[bool] = None
-    ingresosFamiliares: str = Field(..., pattern=r"^\d+(\.\d{1,2})?$")
-    gastosMensuales: str = Field(..., pattern=r"^\d+(\.\d{1,2})?$")
-    vivienda: str = Field(..., pattern=r"^\d+(\.\d{1,2})?$")
-    transporte: str = Field(..., pattern=r"^\d+(\.\d{1,2})?$")
-    alimentacion: str = Field(..., pattern=r"^\d+(\.\d{1,2})?$")
-    otrosGastos: str = Field(..., pattern=r"^\d+(\.\d{1,2})?$")
+    beca: Optional[str] = "N"
+    internet: Optional[str] = "N"
+    computadora: Optional[str] = "N"
+    ingresosFamiliares: str = ""
+    gastosMensuales: str = ""
+    vivienda: str = ""
+    transporte: str = ""
+    alimentacion: str = ""
+    otrosGastos: str = ""
     situacionLaboral: Literal["empleado", "desempleado", "negocio propio", "pensionado", "otro"]
     laboral: Optional[Union[Empleado, NegocioPropio, Pensionado, OtroLaboral, Desempleado]] = None
     dependenciaEconomica: Literal["S", "N"] = "N"
     relacionCompa: Literal["excelente", "buena", "regular", "mala"]
-    integracionUmet: Literal["si", "no"]
+    integracionUmet: Literal["S", "N"]
     relacionDocente: Literal["excelente", "buena", "regular", "mala"]
     relacionPadres: Literal["excelente", "buena", "regular", "mala"]
     relacionPareja: Optional[Literal["excelente", "buena", "regular", "mala"]] = None
+    
+    tipoCasa: Optional[str] = ""
     estadoFamiliar: Literal["cabezaHogar", "vivePadres", "independiente"]
     cabezaHogar: Optional[str] = "N"
     miembros: Optional[List[MiembroFamiliar]] = None
-    academicoPadre: Optional[str] = None
-    academicoMadre: Optional[str] = None
-    sueldoPadre: Optional[float] = None
-    sueldoMadre: Optional[float] = None
+    numeroHijos: Optional[int] = 0
+    numeroFamiliar: Optional[str] = "0"
+    ocupacionPadre: Optional[str] = ""
+    ocupacionMadre: Optional[str] = ""
+    sueldoPadre: Optional[str] = None
+    sueldoMadre: Optional[str] = None
     ingresosPadreMadre: Optional[float] = None
-    tieneDiscapacidad: Literal["si", "no"]
+    tienePadres: Optional[str] = None
+    personasTrabajan: Optional[int] = 0
+    situacionLaboralPadre: Optional[str]= None
+    situacionLaboralMadre: Optional[str]= None
+
+    tieneDiscapacidad: Literal["S", "N"]
     discapacidad: Optional[Discapacidad] = None
-    tieneEnfermedadCronica: Literal["si", "no"]
+    tieneEnfermedadCronica: Literal["S", "N"]
     enfermedadCronica: Optional[EnfermedadCronica] = None
     etnia: Optional[str] = None
     indigenaNacionalidad: Optional[int] = None
-
-    @validator("nombres")
-    def validate_nombres(cls, v):
-        if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$", v):
-            raise ValueError("Los nombres solo pueden contener letras y espacios")
-        return v
-
-    @validator("cedula")
-    def validate_cedula(cls, v):
-        if not re.match(r"^\d+$", v):
-            raise ValueError("La cédula solo puede contener números")
-        return v
 
     @validator("telefono")
     def validate_telefono(cls, v):
@@ -207,30 +214,6 @@ class FichaSocioeconomicaSchema(BaseModel):
         if v.year < 1900 or v.year > 2025:
             raise ValueError("El año de nacimiento debe estar entre 1900 y 2025")
         return v
-
-    @validator("otraUniversidad")
-    def validate_otra_universidad(cls, v, values):
-        if values.get("estudioOtraUniversidad") and not v:
-            raise ValueError("Otra universidad es requerida si estudió en otra universidad")
-        if not values.get("estudioOtraUniversidad") and v:
-            raise ValueError("Otra universidad no debe proporcionarse si no estudió en otra universidad")
-        return v
-
-    @validator("discapacidad")
-    def validate_discapacidad(cls, v, values):
-        if values.get("tieneDiscapacidad") == "si" and not v:
-            raise ValueError("Discapacidad es requerida si tiene discapacidad")
-        if values.get("tieneDiscapacidad") == "no" and v:
-            raise ValueError("Discapacidad no debe proporcionarse si no tiene discapacidad")
-        return v
-
-    @validator("enfermedadCronica")
-    def validate_enfermedad_cronica(cls, v, values):
-        if values.get("tieneEnfermedadCronica") == "si" and not v:
-            raise ValueError("Enfermedad crónica es requerida si tiene enfermedad crónica")
-        if values.get("tieneEnfermedadCronica") == "no" and v:
-            raise ValueError("Enfermedad crónica no debe proporcionarse si no tiene enfermedad crónica")
-        return v
     
     @model_validator(mode="after")
     def set_dependencia_economica(cls, model):
@@ -238,14 +221,6 @@ class FichaSocioeconomicaSchema(BaseModel):
             model.dependenciaEconomica = "S"
         elif model.dependenciaEconomica is None:
             model.dependenciaEconomica = "N"
-        return model
-    
-    @model_validator(mode="after")
-    def convert_booleans_to_si_no(cls, model):
-        if model.internet is not None:
-            model.internet = "SI" if model.internet else "NO"
-        if model.computadora is not None:
-            model.computadora = "SI" if model.computadora else "NO"
         return model
     
     @model_validator(mode="after")
@@ -257,17 +232,34 @@ class FichaSocioeconomicaSchema(BaseModel):
         return model
     
     @model_validator(mode="after")
-    def map_academico_fields(cls, model):
-        ingresosPadreMadre = 0
-        if model.miembros:
-            for miembro in model.miembros:
-                if miembro.parentesco == "padre":
-                    ingresosPadreMadre += miembro.sueldo
-                    model.academicoPadre = miembro.ocupacion
-                    model.sueldoPadre = miembro.sueldo
-                elif miembro.parentesco == "madre":
-                    ingresosPadreMadre += miembro.sueldo
-                    model.academicoMadre = miembro.ocupacion
-                    model.sueldoMadre = miembro.sueldo
-        model.ingresosPadreMadre = ingresosPadreMadre
-        return model
+    def calculos_miembros(self) -> "FichaSocioeconomicaSchema":
+        self.numeroHijos = 0
+        self.personasTrabajan = 0
+        padre_presente = False
+        madre_presente = False
+        if self.miembros:
+            self.numeroFamiliar = str(len(self.miembros))
+            for m in self.miembros:
+                if m.sueldo != "0":
+                    self.personasTrabajan += 1
+                if m.parentesco == "hijo":
+                    self.numeroHijos += 1
+                elif m.parentesco == "padre":
+                    self.ocupacionPadre = m.ocupacion
+                    self.sueldoPadre = m.sueldo
+                    self.situacionLaboralPadre = "T" if m.sueldo != "0" else "NT"
+                    padre_presente = True
+                elif m.parentesco == "madre":
+                    self.ocupacionMadre = m.ocupacion
+                    self.sueldoMadre = m.sueldo
+                    self.situacionLaboralMadre = "T" if m.sueldo != "0" else "NT"
+                    madre_presente = True
+        if padre_presente and madre_presente:
+            self.tienePadres = "AMB"
+        elif padre_presente:
+            self.tienePadres = "PFA"
+        elif madre_presente:
+            self.tienePadres = "MFA"
+        else:
+            self.tienePadres = ""
+        return self

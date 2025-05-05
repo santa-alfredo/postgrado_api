@@ -20,6 +20,13 @@ router = APIRouter(prefix="/ficha", tags=["ficha"])
 
 BASE_URL = os.getenv("BASE_URL")
 
+def obtener_valor_campo(valor):
+    # Verifica si el valor es un objeto con el atributo 'value'
+    if hasattr(valor, 'value'):
+        return valor.value
+    # Si no tiene el atributo 'value', devuelve el valor tal como está
+    return valor
+
 @router.post("/ficha-socioeconomica")
 async def crear_ficha_socioeconomica(
     response: Response, 
@@ -48,6 +55,7 @@ async def crear_ficha_socioeconomica(
             "relacionDocente": "fis_relac_docentes",
             "relacionPadres": "fis_relac_padres",
             "relacionPareja": "fis_relac_pareja",
+            "integracionUmet": "fis_integrado_umet",
 
             "cambioResidencia": "fis_tuvo_camb_resi",
             "direccion": "fis_direccion",
@@ -55,7 +63,7 @@ async def crear_ficha_socioeconomica(
             "ciudadId": "fis_ciudad",
             "parroquiaId": "fis_parroquia",
             
-            "colegio": "fis_cole_graduo",
+            "colegio.value": "fis_cole_graduo",
             "tipoColegio": "fis_cole_tipo",
             "promedio": "fis_calif_grado",
 
@@ -68,14 +76,25 @@ async def crear_ficha_socioeconomica(
             "situacionLaboral": "fis_situacion_lab",
             "dependenciaEconomica": "fis_dependencia_economica",
             "laboral.dependiente": "fis_vive_con",
+            "laboral.empresa": "fis_nombre_emp",
+            "laboral.sueldo": "fis_sueldo",
+            "laborarl.cargo":"fis_cargo",
             "internet": "fis_tiene_internet",
             "computadora": "fis_tiene_compu",
             "cabezaHogar": "fis_cabeza_familia",
+            "tipoCasa": "fis_casa",
             "academicoPadre": "fis_instruccion_padre",
             "academicoMadre": "fis_instruccion_madre",
             "ingresosPadreMadre": "fis_ingreso_padres",
             "sueldoPadre": "fis_sueldo_padre",
             "sueldoMadre": "fis_sueldo_madre",
+            "numeroHijos":"fis_num_hijos",
+            "numeroFamiliar": "fis_cant_fam",
+            "ocupacionPadre":"fis_instruccion_padre",
+            "situacionLaboralPadre": "fis_situ_lab_padres",
+            "ocupacionMadre":"fis_instruccion_madre",
+            "situacionLaboralMadre": "fis_situ_lab_madre",
+            
             "etnia": "fis_recono_etnico",
             "indigenaNacionalidad": "nac_codigo",
         }
@@ -87,6 +106,13 @@ async def crear_ficha_socioeconomica(
             SELECT 1 FROM sna.sna_ficha_socioeconomica WHERE cllc_cdg = :cllc_cdg
         """, {"cllc_cdg": user.username})
         exists = cursor.fetchone() is not None
+
+        cursor.execute("""
+            SELECT TRUNC(MONTHS_BETWEEN(SYSDATE, cllc_fecha_nac) / 12) AS edad
+            FROM sigac.cliente_local
+            WHERE cllc_cdg = :cllc_cdg """, {"cllc_cdg": user.username})
+        row = cursor.fetchone()
+        edad = row[0] if row else 0
 
         if not exists:
             # Armar INSERT
@@ -122,7 +148,8 @@ async def crear_ficha_socioeconomica(
         # Preparar valores para SQL UPDATE
         campos_sql = []
         campos_sql.append("fis_pel_codigo = :fis_pel_codigo")
-        valores_sql = {"cllc_cdg": user.username, "fis_pel_codigo": periodo}
+        campos_sql.append("fis_edad = :fis_edad")
+        valores_sql = {"cllc_cdg": user.username, "fis_pel_codigo": periodo, 'fis_edad':edad}
 
         for frontend_key, db_field in mapa_campos.items():
             if "." in frontend_key:
@@ -147,8 +174,7 @@ async def crear_ficha_socioeconomica(
 
         return {
             "message": "Ficha socioeconómica actualizada correctamente",
-            # "ficha": {"id": user.username}
-            "ficha": None
+            "ficha": {"id": user.username}
         }
 
     except Exception as e:
@@ -164,26 +190,36 @@ async def get_ficha_socioeconomica(
     try:
         #! Periodo actual quemado
         periodo = 65
-
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT fi.*, cl.cllc_nmb, cl.cllc_ruc, cl.cllc_email_univ, cl.cllc_email, cl.cllc_fecha_nac, al.alu_genero,
-                       cl.cllc_celular
-            FROM sna.sna_ficha_socioeconomica fi
-            JOIN sigac.cliente_local cl on cl.cllc_cdg = fi.cllc_cdg
-            JOIN sna.sna_alumno al on al.cllc_cdg = fi.cllc_cdg
-            WHERE cl.cllc_cdg = :cllc_cdg
-            order by fis_pel_codigo DESC
-        """, {"cllc_cdg": user.username})
-        row = cursor.fetchone()
-        if row is None:
-            return {
-                "message": "No se encontró la ficha socioeconómica",
-                "ficha": None,
-                "periodo": False
-            }
-        ficha = dict(zip([col[0].lower() for col in cursor.description], row))
 
+        def fetch_ficha():
+            cursor.execute("""
+                SELECT fi.*, cl.cllc_nmb, cl.cllc_ruc, cl.cllc_email_univ, cl.cllc_email, cl.cllc_fecha_nac,
+                    al.alu_genero, cl.cllc_celular
+                FROM sna.sna_ficha_socioeconomica fi
+                JOIN sigac.cliente_local cl ON cl.cllc_cdg = fi.cllc_cdg
+                JOIN sna.sna_alumno al ON al.cllc_cdg = fi.cllc_cdg
+                WHERE cl.cllc_cdg = :cllc_cdg
+                ORDER BY fis_pel_codigo DESC
+            """, {"cllc_cdg": user.username})
+            row = cursor.fetchone()
+            return dict(zip([col[0].lower() for col in cursor.description], row)) if row else None
+        
+        ficha = fetch_ficha()
+        if not ficha:
+            # si no existe la ficha socioeconomica, se crea una nueva
+            cursor.callproc("sna.sna_inserta_fic_soc2", [
+                int(user.username)
+            ])
+            # se obtiene la ficha socioeconomica
+            ficha = fetch_ficha()
+            if not ficha:
+                raise HTTPException(status_code=404, detail="Ficha socioeconómica no encontrada")
+        
+        if isinstance(ficha["cllc_fecha_nac"], datetime):
+            ficha["cllc_fecha_nac"] = ficha["cllc_fecha_nac"].strftime("%Y-%m-%d")
+
+        #! Obtener beca
         cursor.execute("""
             SELECT DISTINCT tb.tib_descripcion
                 FROM SNA.SNA_BECA B,sna.sna_tipo_beca tb
@@ -196,10 +232,7 @@ async def get_ficha_socioeconomica(
                 and  ROWNUM = 1
         """, {"cllc_cdg": user.username, "pel_codigo": periodo})
         row = cursor.fetchone()
-        if row is None:
-            beca = None
-        else:
-            beca = row[0]
+        beca = row[0] if row else ""
 
         cursor.execute("""
             SELECT ip.car_codigo_postgrado,prp_titulo_proyecto
@@ -214,19 +247,9 @@ async def get_ficha_socioeconomica(
             AND  ROWNUM = 1
         """, {"cllc_cdg": user.username})
         row = cursor.fetchone()
-        if row is None:
-            carrera = {
-                "id": None,
-                "nombre": None
-            }
-        else:
-            carrera = {
-                "id": row[0],
-                "nombre": row[1]
-            }
+        carrera = {"id": row[0], "nombre": row[1]} if row else {"id": None, "nombre": None}
         
-        if isinstance(ficha["cllc_fecha_nac"], datetime):
-            ficha["cllc_fecha_nac"] = ficha["cllc_fecha_nac"].strftime("%d/%m/%Y")
+        #! Formatear la ficha
         ficha = {
             "nombres": ficha["cllc_nmb"],
             "cedula": ficha["cllc_ruc"],
@@ -235,13 +258,21 @@ async def get_ficha_socioeconomica(
             "fechaNacimiento": ficha["cllc_fecha_nac"],
             "genero": ficha["alu_genero"],
             "estadoCivil": ficha["fis_estado_civil"],
-            "nacionalidad": ficha["fis_nacionalidad"] or "ecuatoriano",
+            "nacionalidad": ficha["fis_nacionalidad"] or "593",
             "telefono": ficha["cllc_celular"],
-            "colegio": ficha["fis_cole_graduo"] or 0,
+            "colegio": {
+                "value": ficha["fis_cole_graduo"] or 0,
+                "label": "Colegio" or 0,
+                "tipoValue": ficha["fis_cole_tipo"] or 0,
+                "tipoLabel": ficha["fis_cole_tipo"] or 0
+            },
             "tipoColegio": ficha["fis_cole_tipo"] or 0,
-            "indigenaNacionalidad": ficha["nac_codigo"] or 34,
+            "indigenaNacionalidad": ficha.get("nac_codigo", 34),
             "beca": beca,
-            "carrera": carrera
+            "carrera": carrera,
+            "promedio": ficha["fis_calif_grado"] or 0,
+            "direccion": ficha["fis_direccion"] or "",
+            "etnia": ficha["fis_recono_etnico"] or ""
         }
         return {
             "message": "Ficha socioeconómica encontrada",

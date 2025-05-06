@@ -83,13 +83,15 @@ async def crear_ficha_socioeconomica(
             "computadora": "fis_tiene_compu",
             "cabezaHogar": "fis_cabeza_familia",
             "tipoCasa": "fis_casa",
+            "origenRecursos": "fis_orig_recur_sust",
+            "origenEstudios": "fis_orig_rec_est",
             "academicoPadre": "fis_instruccion_padre",
             "academicoMadre": "fis_instruccion_madre",
-            "ingresosPadreMadre": "fis_ingreso_padres",
             "sueldoPadre": "fis_sueldo_padre",
             "sueldoMadre": "fis_sueldo_madre",
             "numeroHijos":"fis_num_hijos",
             "numeroFamiliar": "fis_cant_fam",
+            "personasTrabajan": "fis_nro_pers_trab",
             "ocupacionPadre":"fis_instruccion_padre",
             "situacionLaboralPadre": "fis_situ_lab_padres",
             "ocupacionMadre":"fis_instruccion_madre",
@@ -171,10 +173,12 @@ async def crear_ficha_socioeconomica(
             """
             cursor.execute(update_sql, valores_sql)
             conn.commit()
-
+        cursor.execute("""SELECT cllc_cdg FROM sigac.cliente_local where cllc_cdg = :cllc_cdg""", {'cllc_cdg':user.username})
+        row = cursor.fetchone()
         return {
             "message": "Ficha socioeconómica actualizada correctamente",
-            "ficha": {"id": user.username}
+            "ficha": {"id": user.username},
+            "periodo": True
         }
 
     except Exception as e:
@@ -247,7 +251,22 @@ async def get_ficha_socioeconomica(
             AND  ROWNUM = 1
         """, {"cllc_cdg": user.username})
         row = cursor.fetchone()
-        carrera = {"id": row[0], "nombre": row[1]} if row else {"id": None, "nombre": None}
+        carrera = {"id": str(row[0]), "nombre": row[1]} if row else {"id": None, "nombre": None}
+
+        # consulta colegio
+        colegio = {"value": 0, "label": "Sin colegio", "tipoValue": 0, "tipoLabel": ""}
+        if ficha['fis_cole_graduo'] and ficha['fis_cole_tipo']:
+            cursor.execute("""
+                SELECT ie.ine_codigo, ie.ine_descripcion, tie.tie_codigo, tie.tie_descripcion
+                FROM sna.sna_institucion_educativa ie ,sna.sna_tipo_institucion_educativa tie
+                WHERE 
+                ie.ine_tipo_institucion <> 'UNIVERSIDAD'
+                and ie.tie_codigo=tie.tie_codigo
+                and ie.ine_codigo = :ine_codigo
+                and tie.tie_codigo = :tie_codigo
+            """, {'ine_codigo':ficha['fis_cole_graduo'], 'tie_codigo': ficha['fis_cole_tipo']})
+            row = cursor.fetchone()
+            colegio = {"value": str(row[0]), "label": row[1], "tipoValue": str(row[2]), "tipoLabel": row[3]}
         
         #! Formatear la ficha
         ficha = {
@@ -260,19 +279,16 @@ async def get_ficha_socioeconomica(
             "estadoCivil": ficha["fis_estado_civil"],
             "nacionalidad": ficha["fis_nacionalidad"] or "593",
             "telefono": ficha["cllc_celular"],
-            "colegio": {
-                "value": ficha["fis_cole_graduo"] or 0,
-                "label": "Colegio" or 0,
-                "tipoValue": ficha["fis_cole_tipo"] or 0,
-                "tipoLabel": ficha["fis_cole_tipo"] or 0
-            },
+            "colegio": colegio,
             "tipoColegio": ficha["fis_cole_tipo"] or 0,
             "indigenaNacionalidad": ficha.get("nac_codigo", 34),
             "beca": beca,
             "carrera": carrera,
             "promedio": ficha["fis_calif_grado"] or 0,
             "direccion": ficha["fis_direccion"] or "",
-            "etnia": ficha["fis_recono_etnico"] or ""
+            "etnia": ficha["fis_recono_etnico"] or "",
+            "anioGraduacion": ficha["fis_especialidad"] or 2000,
+            "semestre": str(ficha.get("fis_semestre_matricula",0)) or "",
         }
         return {
             "message": "Ficha socioeconómica encontrada",

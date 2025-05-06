@@ -91,8 +91,6 @@ class Empleado(BaseModel):
 class NegocioPropio(BaseModel):
     tipo: Literal["negocio propio"] = "negocio propio"
     negocio: str = Field(..., min_length=2, max_length=100)
-    ingresos: float = Field(..., ge=0, le=1000000)
-    gastos: float = Field(..., ge=0, le=1000000)
     actividades: str = Field(..., min_length=2, max_length=100)
 
 class Pensionado(BaseModel):
@@ -177,6 +175,8 @@ class FichaSocioeconomicaSchema(BaseModel):
     tipoCasa: Optional[str] = ""
     estadoFamiliar: Literal["cabezaHogar", "vivePadres", "independiente"]
     cabezaHogar: Optional[str] = "N"
+    origenRecursos: Optional[str] = "0"
+    origenEstudios: Optional[str] = "0"
     miembros: Optional[List[MiembroFamiliar]] = None
     numeroHijos: Optional[int] = 0
     numeroFamiliar: Optional[str] = "0"
@@ -184,7 +184,6 @@ class FichaSocioeconomicaSchema(BaseModel):
     ocupacionMadre: Optional[str] = ""
     sueldoPadre: Optional[str] = None
     sueldoMadre: Optional[str] = None
-    ingresosPadreMadre: Optional[float] = None
     tienePadres: Optional[str] = None
     personasTrabajan: Optional[int] = 0
     situacionLaboralPadre: Optional[str]= None

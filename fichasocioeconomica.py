@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Response, HTTPException, Depends, Body, Query
 from fastapi.responses import StreamingResponse
 from schemas import FichaSocioeconomicaSchema
-import os, io
+import os, io, base64
 from database import get_connection
 import cx_Oracle
 from datetime import datetime
@@ -12,6 +12,7 @@ from jinja2 import Environment, FileSystemLoader
 import tempfile
 from dotenv import load_dotenv
 from typing import Optional
+from pathlib import Path
 
 load_dotenv()
 
@@ -44,6 +45,7 @@ async def crear_ficha_socioeconomica(
             "estadoCivil": "fis_estado_civil",
             "telefono": "fis_celular",
             "nacionalidad": "fis_nacionalidad",
+            "genero": "fis_sexo",
             
             "tieneDiscapacidad": "fis_discapacidad",
             "discapacidad.tipo": "fis_tip_disc",
@@ -74,8 +76,10 @@ async def crear_ficha_socioeconomica(
             "otraUniversidad.razon": "fis_raz_camb_u",
 
             "situacionLaboral": "fis_situacion_lab",
+            "trabaja" : "fis_situacion_laboral",
             "dependenciaEconomica": "fis_dependencia_economica",
-            "laboral.dependiente": "fis_vive_con",
+            "laboral.dependiente": "fis_eco_depende",
+            "estadoFamiliar": "fis_vive_con",
             "laboral.empresa": "fis_nombre_emp",
             "laboral.sueldo": "fis_sueldo",
             "laborarl.cargo":"fis_cargo",
@@ -114,39 +118,50 @@ async def crear_ficha_socioeconomica(
             FROM sigac.cliente_local
             WHERE cllc_cdg = :cllc_cdg """, {"cllc_cdg": user.username})
         row = cursor.fetchone()
+        if (row is None or row[0] is None) and data.fechaNacimiento:
+            # actualizar la fecha de nacimiento 
+            cursor.execute("""
+                UPDATE sigac.cliente_local
+                SET cllc_fecha_nac = :fecha_nac
+                WHERE cllc_cdg = :cllc_cdg
+            """, {
+                "fecha_nac": data.fechaNacimiento,
+                "cllc_cdg": user.username
+            })
+            conn.commit()
+            # 3. Volver a consultar la edad ya actualizada
+            cursor.execute("""
+                SELECT TRUNC(MONTHS_BETWEEN(SYSDATE, cllc_fecha_nac) / 12) AS edad
+                FROM sigac.cliente_local
+                WHERE cllc_cdg = :cllc_cdg
+            """, {"cllc_cdg": user.username})
+            row = cursor.fetchone()
+
         edad = row[0] if row else 0
 
         if not exists:
-            # Armar INSERT
-            campos = ["cllc_cdg"]
-            valores = [":cllc_cdg"]
-            params = {"cllc_cdg": user.username, "fis_pel_codigo": periodo}
+            raise Exception("No tiene una ficha pre-creada")
+        
+        if data.miembros:
+            miembros_dicts = []
+            for m in data.miembros:
+                miembros_dicts.append({
+                    'cllc_cdg': user.username,
+                    'pel_codigo': periodo,
+                    'parentesco': m.parentesco,
+                    'rango_edad': m.edad,
+                    'rango_sueldo': m.sueldo,
+                    'instruccion': m.ocupacion
+                })
 
-            # Usa el mismo mapa que para UPDATE, o haz uno para INSERT si prefieres
-            for frontend_key, db_field in mapa_campos.items():
-                if "." in frontend_key:
-                    main_key, sub_key = frontend_key.split(".")
-                    nested = getattr(data, main_key, None)
-                    if nested and getattr(nested, sub_key, None) is not None:
-                        campos.append(db_field)
-                        valores.append(f":{db_field}")
-                        params[db_field] = getattr(nested, sub_key)
-                else:
-                    value = getattr(data, frontend_key, None)
-                    if value is not None:
-                        campos.append(db_field)
-                        valores.append(f":{db_field}")
-                        params[db_field] = value
-
-            insert_sql = f"""
-                INSERT INTO sna.sna_ficha_socioeconomica ({", ".join(campos)})
-                VALUES ({", ".join(valores)})
+            sql = """
+                INSERT INTO sna.SNA_MIEMBROS_HOGAR (
+                    cllc_cdg, pel_codigo, parentesco, rango_edad, rango_sueldo, instruccion
+                ) VALUES (
+                    :cllc_cdg, :pel_codigo, :parentesco, :rango_edad, :rango_sueldo, :instruccion
+                )
             """
-            cursor.execute(insert_sql, params)
-            conn.commit()
-
-            return {"message": "Ficha socioeconómica insertada correctamente"}
-
+            cursor.executemany(sql, miembros_dicts)
         # Preparar valores para SQL UPDATE
         campos_sql = []
         campos_sql.append("fis_pel_codigo = :fis_pel_codigo")
@@ -198,7 +213,7 @@ async def get_ficha_socioeconomica(
 
         def fetch_ficha():
             cursor.execute("""
-                SELECT fi.*, cl.cllc_nmb, cl.cllc_ruc, cl.cllc_email_univ, cl.cllc_email, cl.cllc_fecha_nac,
+                SELECT fi.*, cl.cllc_nmb, cl.cllc_ruc, cl.cllc_email_univ, cl.cllc_email, al.alu_fecha_nacimiento as cllc_fecha_nac,
                     al.alu_genero, cl.cllc_celular
                 FROM sna.sna_ficha_socioeconomica fi
                 JOIN sigac.cliente_local cl ON cl.cllc_cdg = fi.cllc_cdg
@@ -256,17 +271,20 @@ async def get_ficha_socioeconomica(
         # consulta colegio
         colegio = {"value": 0, "label": "Sin colegio", "tipoValue": 0, "tipoLabel": ""}
         if ficha['fis_cole_graduo'] and ficha['fis_cole_tipo']:
-            cursor.execute("""
-                SELECT ie.ine_codigo, ie.ine_descripcion, tie.tie_codigo, tie.tie_descripcion
-                FROM sna.sna_institucion_educativa ie ,sna.sna_tipo_institucion_educativa tie
-                WHERE 
-                ie.ine_tipo_institucion <> 'UNIVERSIDAD'
-                and ie.tie_codigo=tie.tie_codigo
-                and ie.ine_codigo = :ine_codigo
-                and tie.tie_codigo = :tie_codigo
-            """, {'ine_codigo':ficha['fis_cole_graduo'], 'tie_codigo': ficha['fis_cole_tipo']})
-            row = cursor.fetchone()
-            colegio = {"value": str(row[0]), "label": row[1], "tipoValue": str(row[2]), "tipoLabel": row[3]}
+            try:
+                cursor.execute("""
+                    SELECT ie.ine_codigo, ie.ine_descripcion, tie.tie_codigo, tie.tie_descripcion
+                    FROM sna.sna_institucion_educativa ie ,sna.sna_tipo_institucion_educativa tie
+                    WHERE 
+                    ie.ine_tipo_institucion <> 'UNIVERSIDAD'
+                    and ie.tie_codigo=tie.tie_codigo
+                    and ie.ine_codigo = :ine_codigo
+                    and tie.tie_codigo = :tie_codigo
+                """, {'ine_codigo':ficha['fis_cole_graduo'], 'tie_codigo': ficha['fis_cole_tipo']})
+                row = cursor.fetchone()
+                colegio = {"value": str(row[0]), "label": row[1], "tipoValue": str(row[2]), "tipoLabel": row[3]}
+            except:
+                pass
         
         #! Formatear la ficha
         ficha = {
@@ -307,71 +325,104 @@ async def get_ficha_socioeconomica_pdf(
     conn: cx_Oracle.Connection = Depends(get_connection)
 ):
     try:
-        # Datos de ejemplo para la ficha socioeconómica
-        estudiante = {
-            "nombre": "Juan Pérez Gómez",
-            "cedula": "1234567890",
-            "edad": 20,
-            "direccion": "Av. Principal 123, Quito",
-            "telefono": "0991234567",
-            "correo": "juan.perez@ejemplo.com",
-            "nivel_academico": "Tercer año de Ingeniería",
-            "institucion": "Universidad Central",
-            "discapacidad": "Ninguna",
-            "enfermedad_cronica": "Asma",
-            "trabaja": True,
-            "empresa": "Tech Solutions",
-            "cargo": "Asistente de Desarrollo",
-            "sueldo_estudiante": 500,
-            "negocio_propio": False
-        }
-
-        miembros_hogar = [
-            {"nombre": "María Gómez", "parentesco": "Madre", "edad": 45, "instruccion": "Bachiller", "ocupacion": "Secretaria", "sueldo": 600},
-            {"nombre": "Pedro Pérez", "parentesco": "Padre", "edad": 50, "instruccion": "Universitaria", "ocupacion": "Contador", "sueldo": 1200},
-            {"nombre": "Ana Pérez", "parentesco": "Hermana", "edad": 15, "instruccion": "Secundaria", "ocupacion": "Estudiante", "sueldo": 0}
-        ]
-
-        gastos_basicos = {
-            "salud": 100,
-            "vestimenta": 50,
-            "transporte": 80,
-            "energia": 60,
-            "agua": 30,
-            "internet": 40
-        }
-
-        # Calcular ingresos totales
-        ingresos_totales = sum(miembro["sueldo"] for miembro in miembros_hogar)
-        if estudiante["trabaja"]:
-            ingresos_totales += estudiante["sueldo_estudiante"]
-
-        # Calcular gastos totales
-        gastos_totales = sum(gastos_basicos.values())
-
-        # Calcular balance
-        balance = ingresos_totales - gastos_totales
-        #! Periodo actual quemado
         periodo = 65
-
-        # cursor = conn.cursor()
-        # cursor.execute("""
-        #     SELECT * FROM sna.sna_ficha_socioeconomica 
-        #     WHERE cllc_cdg = :cllc_cdg AND fis_pel_codigo = :fis_pel_codigo
-        # """, {"cllc_cdg": cllc_cdg, "fis_pel_codigo": periodo})
-        # row = cursor.fetchone()
-        # if row is None:
-        #     raise HTTPException(status_code=404, detail="Ficha socioeconómica no encontrada")
+        # Datos de ejemplo para la ficha socioeconómica
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT fi.*, cl.cllc_nmb, cllc_ruc, cllc_email FROM sna.sna_ficha_socioeconomica fi
+            JOIN sigac.cliente_local cl on cl.cllc_cdg = fi.cllc_cdg
+            WHERE cl.cllc_cdg = :cllc_cdg 
+            AND fis_pel_codigo = :fis_pel_codigo
+        """, {"cllc_cdg": cllc_cdg, "fis_pel_codigo": periodo})
+        row = cursor.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Ficha socioeconómica no encontrada")
         
-        # # Convertir la fila a diccionario
-        # ficha = dict(zip([col[0].lower() for col in cursor.description], row))
+        # Convertir la fila a diccionario
+        ficha = dict(zip([col[0].lower() for col in cursor.description], row))
+
+        try:
+            cursor.execute("""
+                SELECT 
+                    pais.area_nombre     AS pais,
+                    provincia.area_nombre AS provincia,
+                    canton.area_nombre    AS canton,
+                    parroquia.area_nombre AS parroquia
+                FROM easi.area_geografica pais
+                JOIN easi.area_geografica provincia 
+                    ON provincia.area_padre = pais.area_codigo
+                    AND provincia.area_codigo = :provincia
+                    AND provincia.area_tipo = 'PR'
+                JOIN easi.area_geografica canton 
+                    ON canton.area_padre = provincia.area_codigo
+                    AND canton.area_codigo = :canton
+                    AND canton.area_tipo = 'CI'
+                JOIN easi.area_geografica parroquia 
+                    ON parroquia.area_padre = canton.area_codigo
+                    AND parroquia.area_codigo = :parroquia
+                    AND parroquia.area_tipo = 'CM'
+                WHERE pais.area_tipo = 'PE'
+                AND pais.area_codigo = '593'
+                """, {'provincia': ficha['fis_provincia'], 'canton': ficha['fis_ciudad'], 'parroquia': ficha['fis_parroquia']}
+            )
+            residencia = cursor.fetchone()
+            pais, provincia, canton, parroquia = residencia
+            ficha['fis_provincia'] = provincia
+            ficha['fis_ciudad'] = canton
+            ficha['fis_parroquia'] = parroquia
+            
+        except Exception as e:
+            print(e)
+            pass
+
+        try:
+            cursor.execute("""
+                SELECT ie.ine_descripcion, tie.tie_descripcion
+                FROM sna.sna_institucion_educativa ie ,sna.sna_tipo_institucion_educativa tie
+                WHERE 
+                ie.ine_tipo_institucion <> 'UNIVERSIDAD'
+                and ie.tie_codigo=tie.tie_codigo
+                and ie.ine_codigo = :ine_codigo
+                and tie.tie_codigo = :tie_codigo
+                """, {'ine_codigo': ficha['fis_cole_graduo'], 'tie_codigo': ficha['fis_cole_tipo']}
+            )
+            colegio = cursor.fetchone()
+            colegio_name, colegio_tipo = colegio
+            ficha['fis_cole_graduo'] = colegio_name
+            ficha['fis_cole_tipo'] = colegio_tipo
+
+        except Exception as e:
+            pass
+        
+        try:
+            cursor.execute("""
+                select prp_titulo_proyecto
+                from sna.sna_inscripcion_postgrado ip,sna.sna_proyecto_postgrado pp
+                where ip.cllc_cdg= :cllc_cdg
+                and ip.prp_numero_postgrado=pp.prp_numero
+                and ip.car_codigo_postgrado = :carrera""", {'cllc_cdg': cllc_cdg, 'carrera': ficha['fis_carrera_matricula']}
+            )
+            carrera = cursor.fetchone()
+            ficha['fis_carrera_matricula'] = carrera[0]
+        except Exception as e:
+            pass
+
+        cursor.execute("""
+            SELECT * FROM sna.sna_miembros_hogar
+            WHERE cllc_cdg = :cllc_cdg AND pel_codigo = :fis_pel_codigo
+        """, {'cllc_cdg': cllc_cdg, 'fis_pel_codigo': periodo})
+        columns = [col[0].lower() for col in cursor.description]
+        rows = cursor.fetchall()
+        if rows is None:
+            miembros_hogar=[]
+        miembros_hogar = [dict(zip(columns, row)) for row in rows]        
         
         # Configurar el entorno de Jinja2
         env = Environment(loader=FileSystemLoader('templates'))
         template = env.get_template('ficha_socioeconomica.html')
         
         # Renderizar la plantilla con los datos
-        html_content = template.render({"estudiante": estudiante, "miembros_hogar": miembros_hogar, "gastos_basicos": gastos_basicos, "ingresos_totales": ingresos_totales, "gastos_totales": gastos_totales, "balance": balance, "logo_url": f"{BASE_URL}/static/logo/logo_umet.png", "foto_url": f"{BASE_URL}/static/logo/avatar.png"})
+        html_content = template.render({"ficha": ficha, "miembros_hogar": miembros_hogar, "foto_url": f"{BASE_URL}/static/logo/avatar.png"})
         
          # Crear el PDF en memoria
         pdf_stream = io.BytesIO()

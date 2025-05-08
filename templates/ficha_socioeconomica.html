@@ -1,195 +1,344 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Ficha Socioeconómica</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 10px;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .section {
-            margin-bottom: 15px;
-        }
-        .section-title {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .field {
-            margin-bottom: 5px;
-        }
-        .field-label {
-            font-weight: bold;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        /* Paginación: número de página en el pie de página */
         @page {
-            margin-bottom: 50px;  /* espacio para el pie de página */
+            size: A4;
+            margin: 20mm;
+            @bottom-right {
+                content: "Pág. " counter(page) " de " counter(pages);
+                font-family: 'Helvetica', Arial, sans-serif;
+                font-size: 10pt;
+                color: #333;
+            }
         }
-        /* Membrete en la primera página */
+
+        body {
+            font-family: 'Helvetica', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #333;
+        }
+
         .membrete {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-bottom: 2px solid #000; /* Línea que separa el membrete del contenido */
-            padding-bottom: 20px;
-            margin-bottom: 30px; /* Espacio debajo del membrete */
+            border-bottom: 2px solid #005555;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
         }
 
-        /* Logo de la universidad */
         .membrete .logo img {
-            width: 100px; /* Ajusta el tamaño según el logo */
+            width: 80px;
             height: auto;
         }
 
-        /* Título del documento */
         .membrete .titulo h1 {
-            font-size: 24px;
+            font-size: 20pt;
             font-weight: bold;
             text-align: center;
-            flex-grow: 1;
+            color: #005555;
+            margin: 0;
         }
 
-        /* Foto del estudiante */
         .membrete .foto img {
-            width: 60px; /* Ajusta el tamaño de la foto */
+            width: 60px;
             height: 60px;
             border-radius: 50%;
             object-fit: cover;
+            border: 2px solid #005555;
         }
 
-        footer {
-            position: fixed;
-            bottom: 5mm;
-            right: 5mm;
-            text-align: right;
-            font-size: 10pt;
-            color: #000;
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
         }
 
-        footer .page-number::after {
-            content: "Pág. " counter(page) " de " counter(pages);
+        .header h2 {
+            font-size: 14pt;
+            color: #005555;
+            margin: 5px 0;
+        }
+
+        .header h3 {
+            font-size: 12pt;
+            color: #333;
+            margin: 5px 0;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+
+        .section-title {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #005555;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #005555;
+            padding-bottom: 5px;
+        }
+
+        .subsection-title {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0 5px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            width: 100%;
+        }
+
+        .field {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .field-label {
+            font-weight: bold;
+            width: 150px;
+            color: #333;
+            flex-shrink: 0;
+        }
+
+        .field-value {
+            flex: 1;
+            color: #555;
+            word-break: break-word;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+            font-size: 9pt;
+        }
+
+        th {
+            background-color: #005555;
+            color: white;
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+
+        @media print {
+            body {
+                margin: 0;
+                font-size: 9pt;
+            }
+
+            .section {
+                break-inside: avoid;
+            }
+
+            table {
+                break-inside: auto;
+            }
+
+            tr {
+                break-inside: avoid;
+                break-after: auto;
+            }
+
+            .info-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
     </style>
 </head>
 <body>
-    <!-- Membrete en la primera página -->
+    <!-- Membrete -->
     <div class="membrete">
         <div class="logo">
-          <img src="http://localhost:8000/static/logo/avatar.png" alt="Logo Universidad" />
+            <img src="https://mail2.umet.edu.ec/logo_umet.png" alt="Logo Universidad">
         </div>
         <div class="titulo">
-          <h1>Ficha Socioeconómica</h1>
+            <h1>Ficha Socioeconómica</h1>
         </div>
         <div class="foto">
-          <img src="https://cdn2.iconfinder.com/data/icons/circle-avatars-1/128/050_girl_avatar_profile_woman_suit_student_officer-512.png" alt="Foto del estudiante" />
+            <img src="https://cdn2.iconfinder.com/data/icons/circle-avatars-1/128/050_girl_avatar_profile_woman_suit_student_officer-512.png" alt="Foto del estudiante">
         </div>
     </div>
 
-    <footer>
-        <div class="page-number"></div>
-    </footer>
+    <!-- Encabezado -->
+    <div class="header">
+        <h2>{{ficha.cllc_nmb}}</h2>
+        <h3>{{ficha.cllc_ruc}}</h3>
+    </div>
 
-    <h1>Ficha Socioeconómica</h1>
-
+    <!-- Información Personal -->
     <div class="section">
-        <h2>Información Personal</h2>
+        <div class="section-title">Información Personal</div>
         <div class="info-grid">
-            <strong>Nombre:</strong> <span>{{estudiante.nombre}}</span>
-            <strong>Cédula:</strong> <span>{{estudiante.cedula}}</span>
-            <strong>Edad:</strong> <span>{{estudiante.edad}}</span>
-            <strong>Dirección:</strong> <span>{{estudiante.direccion}}</span>
-            <strong>Teléfono:</strong> <span>{{estudiante.telefono}}</span>
-            <strong>Correo:</strong> <span>{{estudiante.correo}}</span>
+            <div class="field"><span class="field-label">Fecha Nacimiento:</span><span class="field-value">{{ficha.fis_fecha_nac.strftime('%d/%m/%Y')}}</span></div>
+            <div class="field"><span class="field-label">Edad:</span><span class="field-value">{{ficha.fis_edad}}</span></div>
+            <div class="field"><span class="field-label">Estado Civil:</span><span class="field-value">{{ficha.fis_estado_civil}}</span></div>
+            <div class="field"><span class="field-label">Sexo:</span><span class="field-value">{{ficha.fis_sexo}}</span></div>
+            <div class="field"><span class="field-label">País de Origen:</span><span class="field-value">{{ficha.fis_nacionalidad}}</span></div>
+            <div class="field"><span class="field-label">Teléfono:</span><span class="field-value">{{ficha.fis_celular}}</span></div>
+            <div class="field"><span class="field-label">Correo:</span><span class="field-value">{{ficha.cllc_email}}</span></div>
+            <div class="field"><span class="field-label">Autoreconocimiento Étnico:</span><span class="field-value">{{ficha.fis_recono_etnico}}</span></div>
+            {% if ficha.fis_nac %}
+                <div class="field"><span class="field-label">Nacionalidad Indígena:</span><span class="field-value">{{ficha.fis_nac}}</span></div>
+            {% endif %}
         </div>
     </div>
 
+    <!-- Residencia -->
     <div class="section">
-        <h2>Información Académica</h2>
+        <div class="section-title">Residencia</div>
         <div class="info-grid">
-            <strong>Nivel Académico:</strong> <span>{{estudiante.nivel_academico}}</span>
-            <strong>Institución:</strong> <span>{{estudiante.institucion}}</span>
+            <div class="field"><span class="field-label">Dirección:</span><span class="field-value">{{ficha.fis_direccion}}</span></div>
+            <div class="field"><span class="field-label">Provincia:</span><span class="field-value">{{ficha.fis_provincia}}</span></div>
+            <div class="field"><span class="field-label">Cantón:</span><span class="field-value">{{ficha.fis_ciudad}}</span></div>
+            <div class="field"><span class="field-label">Parroquia:</span><span class="field-value">{{ficha.fis_parroquia}}</span></div>
         </div>
     </div>
 
+    <!-- Información Académica -->
     <div class="section">
-        <h2>Historial de Salud</h2>
+        <div class="section-title">Información Académica</div>
+        <div class="subsection-title">Educación Secundaria</div>
         <div class="info-grid">
-            <strong>Discapacidad:</strong> <span>{{estudiante.discapacidad}}</span>
-            <strong>Enfermedad Crónica:</strong> <span>{{estudiante.enfermedad_cronica}}</span>
+            <div class="field"><span class="field-label">Año de Graduación:</span><span class="field-value">{{ficha.fis_especialidad}}</span></div>
+            <div class="field"><span class="field-label">Institución:</span><span class="field-value">{{ficha.fis_cole_graduo}}</span></div>
+            <div class="field"><span class="field-label">Calificación Grado:</span><span class="field-value">{{ficha.fis_calif_grado}}</span></div>
+        </div>
+        <div class="subsection-title">Universidad UMET</div>
+        <div class="info-grid">
+            <div class="field"><span class="field-label">Semestre:</span><span class="field-value">{{ficha.fis_semestre_matricula}}</span></div>
+            <div class="field"><span class="field-label">Carrera:</span><span class="field-value">{{ficha.fis_carrera_matricula}}</span></div>
         </div>
     </div>
 
+    <!-- Información Adicional -->
     <div class="section">
-        <h2>Miembros del Hogar</h2>
+        <div class="section-title">Información Adicional</div>
+        <div class="info-grid">
+            <div class="field"><span class="field-label">Cambio de Residencia:</span><span class="field-value">{{ficha.fis_tuvo_camb_resi}}</span></div>
+            <div class="field"><span class="field-label">Cambio de Universidad:</span><span class="field-value">{{ficha.fis_est_otr_u}}</span></div>
+            <div class="field"><span class="field-label">Vive con:</span><span class="field-value">{{ficha.fis_vive_con}}</span></div>
+            <div class="field"><span class="field-label">Vivienda:</span><span class="field-value">{{ficha.fis_casa}}</span></div>
+            <div class="field"><span class="field-label">Internet en casa:</span><span class="field-value">{{ficha.fis_tiene_internet}}</span></div>
+            <div class="field"><span class="field-label">Laptop/PC en casa:</span><span class="field-value">{{ficha.fis_tiene_compu}}</span></div>
+            <div class="field"><span class="field-label">Origen Recursos Sustento:</span><span class="field-value">{{ficha.fis_orig_recur_sust}}</span></div>
+            <div class="field"><span class="field-label">Origen Recursos Estudios:</span><span class="field-value">{{ficha.fis_orig_rec_est}}</span></div>
+        </div>
+    </div>
+
+    <!-- Historial de Salud -->
+    <div class="section">
+        <div class="section-title">Historial de Salud</div>
+        <div class="info-grid">
+            <div class="field">
+                <span class="field-label">Discapacidad:</span>
+                <span class="field-value">{{ficha.fis_discapacidad}}</span>
+            </div>
+            {% if ficha.fis_discapacida == 'S' %}
+            <div class="field">
+                <span class="field-label">Tipo:</span>
+                <span class="field-value">{{ficha.fis_tip_disc}}</span>
+            </div>
+            <div class="field">
+                <span class="field-label">Porcentaje:</span>
+                <span class="field-value">{{ficha.fis_porc_disc}}%</span>
+            </div>
+            <div class="field">
+                <span class="field-label">Carnet:</span>
+                <span class="field-value">{{ficha.fis_nro_carnet}}</span>
+            </div>
+            {% endif %}
+            <div class="field">
+                <span class="field-label">Enfermedad Crónica:</span>
+                <span class="field-value">{{ficha.fis_enfer_present}}</span>
+            </div>
+            <div class="field">
+                <span class="field-label">Tipo de Beca:</span>
+                <span class="field-value">{{ficha.fis_beca}}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Miembros del Hogar -->
+    <div class="section">
+        <div class="section-title">Miembros del Hogar</div>
+        <div class="info-grid">
+            <div class="field"><span class="field-label">Estado Familiar:</span><span class="field-value">{{ficha.fis_vive_con}}</span></div>
+            <div class="field"><span class="field-label">Número de Hijos:</span><span class="field-value">{{ficha.fis_num_hijos}}</span></div>
+        </div>
         <table>
             <thead>
                 <tr>
-                    <th>Nombre</th>
+                    <th>Nro</th>
                     <th>Parentesco</th>
                     <th>Edad</th>
                     <th>Instrucción</th>
-                    <th>Ocupación</th>
                     <th>Sueldo</th>
                 </tr>
             </thead>
             <tbody>
                 {% for m in miembros_hogar %}
                 <tr>
-                    <td>{{m.nombre}}</td>
+                    <td>{{m.id_miembro}}</td>
                     <td>{{m.parentesco}}</td>
-                    <td>{{m.edad}}</td>
+                    <td>{{m.rango_edad}}</td>
                     <td>{{m.instruccion}}</td>
-                    <td>{{m.ocupacion}}</td>
-                    <td>${{m.sueldo}}</td>
+                    <td>{{m.rango_sueldo}}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 
+    <!-- Información Laboral -->
     <div class="section">
-        <h2>Información Económica</h2>
+        <div class="section-title">Información Laboral del Estudiante</div>
         <div class="info-grid">
-                <strong>Ingresos Totales:</strong> <span>${{ingresos_totales}}</span>
-            <strong>Gastos Básicos:</strong>
-            <div>
-                {% for key, value in gastos_basicos.items() %}
-                    <div>{{key.capitalize()}}: ${{value}}</div>
-                {% endfor %}
-                <div class='summary'>Total Gastos: ${{gastos_totales}}</div>
-            </div>
-            <strong>Balance:</strong> <span>${{balance}}</span>
+            <div class="field"><span class="field-label">Dependencia Económica:</span><span class="field-value">{{ficha.fis_dependencia_economica}}</span></div>
+            <div class="field"><span class="field-label">Trabaja:</span><span class="field-value">{{ficha.fis_situacion_laboral}}</span></div>
+            {% if ficha.fis_situacion_laboral == 'empleado' %}
+                <div class="field"><span class="field-label">Empresa:</span><span class="field-value">{{ficha.fis_nombre_emp}}</span></div>
+                <div class="field"><span class="field-label">Cargo:</span><span class="field-value">{{ficha.fis_cargo}}</span></div>
+                <div class="field"><span class="field-label">Sueldo:</span><span class="field-value">${{ficha.fis_sueldo}}</span></div>
+            {% endif %}
+            {% if ficha.fis_situacion_laboral == 'negocio propio' %}
+                <div class="field"><span class="field-label">Negocio:</span><span class="field-value">{{ficha.fis_nombre_emp}}</span></div>
+                <div class="field"><span class="field-label">Actividad:</span><span class="field-value">{{ficha.fis_cargo}}</span></div>
+            {% endif %}
         </div>
     </div>
 
+    <!-- Relaciones Personales -->
     <div class="section">
-        <h2>Información Laboral del Estudiante</h2>
+        <div class="section-title">Relaciones Personales</div>
         <div class="info-grid">
-            <strong>Trabaja:</strong> <span>{% if estudiante.trabaja %}Sí{% else %}No{% endif %}</span>
-            {% if estudiante.trabaja %}
-                <strong>Empresa:</strong> <span>{{estudiante.empresa}}</span>
-                <strong>Cargo:</strong> <span>{{estudiante.cargo}}</span>
-                <strong>Sueldo:</strong> <span>${{estudiante.sueldo_estudiante}}</span>
-            {% endif %}
-            <strong>Negocio Propio:</strong> <span>{% if estudiante.negocio_propio %}Sí{% else %}No{% endif %}</span>
+            <div class="field"><span class="field-label">Integrado en UMET:</span><span class="field-value">{{ficha.fis_integrado_umet}}</span></div>
+            <div class="field"><span class="field-label">Relación con Compañeros:</span><span class="field-value">{{ficha.fis_relac_companeros}}</span></div>
+            <div class="field"><span class="field-label">Relación con Docentes:</span><span class="field-value">{{ficha.fis_relac_docentes}}</span></div>
+            <div class="field"><span class="field-label">Relación con Padres:</span><span class="field-value">{{ficha.fis_relac_padres}}</span></div>
+            <div class="field"><span class="field-label">Relación con Pareja:</span><span class="field-value">{{ficha.fis_relac_pareja}}</span></div>
         </div>
     </div>
 </body>
-</html> 
+</html>

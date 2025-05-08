@@ -7,6 +7,7 @@ import re
 class User(BaseModel):
     username: str
     email: EmailStr
+    name: str
 
 class LoginForm(BaseModel):
     email: EmailStr
@@ -164,6 +165,7 @@ class FichaSocioeconomicaSchema(BaseModel):
     alimentacion: str = ""
     otrosGastos: str = ""
     situacionLaboral: Literal["empleado", "desempleado", "negocio propio", "pensionado", "otro"]
+    trabaja: Optional[str] = 'N'
     laboral: Optional[Union[Empleado, NegocioPropio, Pensionado, OtroLaboral, Desempleado]] = None
     dependenciaEconomica: Literal["S", "N"] = "N"
     relacionCompa: Literal["excelente", "buena", "regular", "mala"]
@@ -173,7 +175,7 @@ class FichaSocioeconomicaSchema(BaseModel):
     relacionPareja: Optional[Literal["excelente", "buena", "regular", "mala"]] = None
     
     tipoCasa: Optional[str] = ""
-    estadoFamiliar: Literal["cabezaHogar", "vivePadres", "independiente"]
+    estadoFamiliar: Literal["cabezaHogar", "familia", "independiente"]
     cabezaHogar: Optional[str] = "N"
     origenRecursos: Optional[str] = "0"
     origenEstudios: Optional[str] = "0"
@@ -218,15 +220,17 @@ class FichaSocioeconomicaSchema(BaseModel):
     def set_dependencia_economica(cls, model):
         if model.situacionLaboral == "desempleado":
             model.dependenciaEconomica = "S"
+            model.trabaja = 'N'
         elif model.dependenciaEconomica is None:
             model.dependenciaEconomica = "N"
+            model.trabaja = 'S'
         return model
     
     @model_validator(mode="after")
     def set_cabeza_hogar(cls, model):
         if model.estadoFamiliar == "cabezaHogar":
             model.cabezaHogar = "S"
-        elif model.estadoFamiliar == "vivePadres":
+        elif model.estadoFamiliar == "familia":
             model.cabezaHogar = "N"
         return model
     
@@ -254,11 +258,11 @@ class FichaSocioeconomicaSchema(BaseModel):
                     self.situacionLaboralMadre = "T" if m.sueldo != "0" else "NT"
                     madre_presente = True
         if padre_presente and madre_presente:
-            self.tienePadres = "AMB"
+            self.tienePadres = "AMBOS"
         elif padre_presente:
             self.tienePadres = "PFA"
         elif madre_presente:
             self.tienePadres = "MFA"
         else:
-            self.tienePadres = ""
+            self.tienePadres = "OTRO"
         return self

@@ -61,12 +61,12 @@ async def crear_ficha_socioeconomica(
 
             "cambioResidencia": "fis_tuvo_camb_resi",
             "direccion": "fis_direccion",
-            "provinciaId": "fis_provincia",
-            "ciudadId": "fis_ciudad",
-            "parroquiaId": "fis_parroquia",
+            "provincia.label": "fis_provincia",
+            "ciudad.label": "fis_ciudad",
+            "parroquia.label": "fis_parroquia",
             
-            "colegio.value": "fis_cole_graduo",
-            "tipoColegio": "fis_cole_tipo",
+            "colegio.label": "fis_cole_graduo",
+            "colegio.tipoLabel": "fis_cole_tipo",
             "promedio": "fis_calif_grado",
 
             "carrera": "fis_carrera_matricula",
@@ -269,23 +269,7 @@ async def get_ficha_socioeconomica(
         carrera = {"id": str(row[0]), "nombre": row[1]} if row else {"id": None, "nombre": None}
 
         # consulta colegio
-        colegio = {"value": 0, "label": "Sin colegio", "tipoValue": 0, "tipoLabel": ""}
-        if ficha['fis_cole_graduo'] and ficha['fis_cole_tipo']:
-            try:
-                cursor.execute("""
-                    SELECT ie.ine_codigo, ie.ine_descripcion, tie.tie_codigo, tie.tie_descripcion
-                    FROM sna.sna_institucion_educativa ie ,sna.sna_tipo_institucion_educativa tie
-                    WHERE 
-                    ie.ine_tipo_institucion <> 'UNIVERSIDAD'
-                    and ie.tie_codigo=tie.tie_codigo
-                    and ie.ine_codigo = :ine_codigo
-                    and tie.tie_codigo = :tie_codigo
-                """, {'ine_codigo':ficha['fis_cole_graduo'], 'tie_codigo': ficha['fis_cole_tipo']})
-                row = cursor.fetchone()
-                colegio = {"value": str(row[0]), "label": row[1], "tipoValue": str(row[2]), "tipoLabel": row[3]}
-            except:
-                pass
-        
+        colegio = {"value": "", "label": ficha['fis_cole_graduo'] or "", "tipoValue": "", "tipoLabel": ficha['fis_cole_tipo'] or ""}
         #! Formatear la ficha
         ficha = {
             "nombres": ficha["cllc_nmb"],
@@ -307,6 +291,18 @@ async def get_ficha_socioeconomica(
             "etnia": ficha["fis_recono_etnico"] or "",
             "anioGraduacion": ficha["fis_especialidad"] or 2000,
             "semestre": str(ficha.get("fis_semestre_matricula",0)) or "",
+            "provincia": {
+                "value": "999999",
+                "label": ficha["fis_provincia"] or ""
+            },
+            "ciudad": {
+                "value": "999999",
+                "label": ficha["fis_ciudad"] or ""
+            },
+            "parroquia": {
+                "value": "999999",
+                "label": ficha["fis_parroquia"] or ""
+            }
         }
         return {
             "message": "Ficha socioeconómica encontrada",
@@ -523,7 +519,7 @@ def get_provincias(
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT area_nombre as nombre,area_codigo as id
+            SELECT area_nombre as label,area_codigo as value
             FROM   easi.area_geografica
             WHERE  area_tipo   = 'PR'
             AND area_padre='593'
@@ -546,7 +542,7 @@ def get_ciudades(
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT area_nombre as nombre,area_codigo as id
+            SELECT area_nombre as label,area_codigo as value
             FROM   easi.area_geografica
             WHERE  area_tipo   = 'CI'
             AND area_padre=:provinciaId
@@ -568,7 +564,7 @@ def get_parroquias(
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT area_nombre as nombre,area_codigo as id
+            SELECT area_nombre as label,area_codigo as value
             FROM   easi.area_geografica
             WHERE  area_tipo   = 'CM'
             AND area_padre=:ciudadId

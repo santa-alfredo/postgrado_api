@@ -120,7 +120,7 @@ class Discapacidad(BaseModel):
 
 class EnfermedadCronica(BaseModel):
     nombre: str = Field(...)
-    lugaresTratamiento: Literal["clinicaPrivada", "publica", "iess", "otro"]
+    lugaresTratamiento: str = ""
 
 class Colegio(BaseModel):
     value: str
@@ -131,6 +131,10 @@ class Colegio(BaseModel):
     class Config:
         min_anystr_length = 1
         anystr_strip_whitespace = True
+
+class SelectOption(BaseModel):
+    value: str
+    label: str
 
 class FichaSocioeconomicaSchema(BaseModel):
     cllc_cdg: Optional[int] = None # primary key
@@ -144,12 +148,11 @@ class FichaSocioeconomicaSchema(BaseModel):
     nacionalidad: str = Field(..., max_length=30)
     cambioResidencia: Optional[str] = "N"
     direccion: str = Field(..., min_length=10, max_length=200)
-    provinciaId: str = Field(...)
-    ciudadId: str = Field(...)
-    parroquiaId: str = Field(...)
+    provincia: SelectOption
+    ciudad: SelectOption
+    parroquia: SelectOption
     carrera: str = Field(..., min_length=2, max_length=100)
     colegio: Colegio = Field(...)
-    tipoColegio: str = Field(..., max_length=20)
     anioGraduacion: int = Field(..., ge=1900, le=2025)
     semestre: str = Field(..., pattern=r"^\d+$")
     promedio: float = Field(..., ge=0, le=10)
@@ -233,6 +236,15 @@ class FichaSocioeconomicaSchema(BaseModel):
         elif model.estadoFamiliar == "familia":
             model.cabezaHogar = "N"
         return model
+    
+    @model_validator(mode="after")
+    def split_label_and_tipo(self):
+        # label: "NACIONAL DOLORES SUCRE (FISCAL)"
+        if " (" in self.colegio.label and self.colegio.label.endswith(")"):
+            nombre, tipo = self.colegio.label.rsplit(" (", 1)
+            self.colegio.label = nombre.strip()
+            self.colegio.tipoLabel = tipo.replace(")", "").strip()
+        return self
     
     @model_validator(mode="after")
     def calculos_miembros(self) -> "FichaSocioeconomicaSchema":

@@ -21,12 +21,35 @@ router = APIRouter(prefix="/ficha", tags=["ficha"])
 
 BASE_URL = os.getenv("BASE_URL")
 
-def obtener_valor_campo(valor):
-    # Verifica si el valor es un objeto con el atributo 'value'
-    if hasattr(valor, 'value'):
-        return valor.value
-    # Si no tiene el atributo 'value', devuelve el valor tal como está
-    return valor
+def generar_update_sql(data, mapa_campos: dict, tabla: str, where_cond: str, extras: dict = {}) -> tuple[str, dict]:
+    campos_sql = []
+    valores_sql = dict(extras)  # Agrega extras como cllc_cdg, fis_pel_codigo, etc.
+
+    for frontend_key, db_field in mapa_campos.items():
+        if "." in frontend_key:
+            main_key, sub_key = frontend_key.split(".")
+            nested_obj = getattr(data, main_key, None)
+            if nested_obj:
+                valor = getattr(nested_obj, sub_key, None)
+                if valor is not None:
+                    campos_sql.append(f"{db_field} = :{db_field}")
+                    valores_sql[db_field] = valor
+        else:
+            valor = getattr(data, frontend_key, None)
+            if valor is not None:
+                campos_sql.append(f"{db_field} = :{db_field}")
+                valores_sql[db_field] = valor
+
+    if not campos_sql:
+        return None, None
+
+    update_sql = f"""
+        UPDATE {tabla}
+        SET {", ".join(campos_sql)}
+        WHERE {where_cond}
+    """
+    return update_sql, valores_sql
+
 
 @router.post("/ficha-socioeconomica")
 async def crear_ficha_socioeconomica(
@@ -40,18 +63,22 @@ async def crear_ficha_socioeconomica(
         periodo = 65
         
         # Mapeo como diccionario
-        mapa_campos = {
+        mapeo_ficha = {
             "fechaNacimiento": "fis_fecha_nac",
             "estadoCivil": "fis_estado_civil",
             "telefono": "fis_celular",
             "nacionalidad": "fis_nacionalidad",
             "genero": "fis_sexo",
+            "generoIdentidad": "fis_genero",
+            "orientacionSexual": "fis_orientacio_sexual",
             
             "tieneDiscapacidad": "fis_discapacidad",
             "discapacidad.tipo": "fis_tip_disc",
             "discapacidad.porcentaje": "fis_porc_disc",
             "discapacidad.carnet": "fis_nro_carnet",
+            "discapacidad.tieneDiagnosticoPresuntivo": "fis_diagnostico_p",
             "enfermedadCronica.nombre": "fis_enfer_present",
+
             
             "relacionCompa": "fis_relac_companeros",
             "relacionDocente": "fis_relac_docentes",
@@ -61,6 +88,7 @@ async def crear_ficha_socioeconomica(
 
             "cambioResidencia": "fis_tuvo_camb_resi",
             "direccion": "fis_direccion",
+            "pais.label": "fis_pais_dom",
             "provincia.label": "fis_provincia",
             "ciudad.label": "fis_ciudad",
             "parroquia.label": "fis_parroquia",
@@ -103,26 +131,32 @@ async def crear_ficha_socioeconomica(
             
             "etnia": "fis_recono_etnico",
             "indigenaNacionalidad": "nac_codigo",
+
+            "contactoParentesco": "fis_parentesco_emerg",
+            "contactoNombre": "fis_nombre_emerg",
+            "contactoCelular": "fis_celular_emerg",
         }
-        
         cursor = conn.cursor()
 
-        # Verifica existencia
+        # Verifica existencia de Ficha
         cursor.execute("""
             SELECT 1 FROM sna.sna_ficha_socioeconomica WHERE cllc_cdg = :cllc_cdg
         """, {"cllc_cdg": user.username})
         exists = cursor.fetchone() is not None
-
+        
+        # Consultar la edad desde SNA_ALUMNO
         cursor.execute("""
-            SELECT TRUNC(MONTHS_BETWEEN(SYSDATE, cllc_fecha_nac) / 12) AS edad
-            FROM sigac.cliente_local
+            SELECT TRUNC(MONTHS_BETWEEN(SYSDATE, alu_fecha_nacimiento) / 12) AS edad
+            FROM sna.sna_alumno
             WHERE cllc_cdg = :cllc_cdg """, {"cllc_cdg": user.username})
         row = cursor.fetchone()
+
+        # Si no existe edad actualizar con data
         if (row is None or row[0] is None) and data.fechaNacimiento:
             # actualizar la fecha de nacimiento 
             cursor.execute("""
-                UPDATE sigac.cliente_local
-                SET cllc_fecha_nac = :fecha_nac
+                UPDATE sna.sna_alumno
+                SET alu_fecha_nacimiento = :fecha_nac
                 WHERE cllc_cdg = :cllc_cdg
             """, {
                 "fecha_nac": data.fechaNacimiento,
@@ -131,8 +165,8 @@ async def crear_ficha_socioeconomica(
             conn.commit()
             # 3. Volver a consultar la edad ya actualizada
             cursor.execute("""
-                SELECT TRUNC(MONTHS_BETWEEN(SYSDATE, cllc_fecha_nac) / 12) AS edad
-                FROM sigac.cliente_local
+                SELECT TRUNC(MONTHS_BETWEEN(SYSDATE, alu_fecha_nacimiento) / 12) AS edad
+                FROM sna.sna_alumno
                 WHERE cllc_cdg = :cllc_cdg
             """, {"cllc_cdg": user.username})
             row = cursor.fetchone()
@@ -142,6 +176,51 @@ async def crear_ficha_socioeconomica(
         if not exists:
             raise Exception("No tiene una ficha pre-creada")
         
+
+        mapeo_alumno = {
+            "estadoCivil":"cod_estado",
+            "pais.value":"area_codigo_pais_dom",
+            "provincia.value":"area_codigo_provincia_dom",
+            "ciudad.value":"area_codigo_ciudad_dom",
+            "parroquia.value":"area_codigo_parroquia_dom",
+            "fechaNacimiento":"alu_fecha_nacimiento",
+            "etnia": "alu_autoreconocimiento_etn",
+            "indigenaNacionalidad":"nac_codigo",
+        }
+
+        # Generar y ejecutar actualización de alumno
+        sql_alumno, valores_alumno = generar_update_sql(
+            data,
+            mapa_campos=mapeo_alumno,
+            tabla="sna.sna_alumno",
+            where_cond="cllc_cdg = :cllc_cdg",
+            extras={"cllc_cdg": user.username}
+        )
+        if sql_alumno:
+            cursor.execute(sql_alumno, valores_alumno)
+            conn.commit()
+
+        mapeo_cliente = {
+            "direccion":"cllc_calle",
+            "telefono":"cllc_celular",
+            "email":"cllc_email",
+            "contactoNombre":"cllc_pers_contacto",
+            "contactoCelular":"cllc_contacto",
+            "fechaNacimiento":"cllc_fecha_nac",
+        }
+
+        # Generar y ejecutar actualización de cliente
+        sql_cliente, valores_cliente = generar_update_sql(
+            data,
+            mapa_campos=mapeo_cliente,
+            tabla="sigac.cliente_local",
+            where_cond="cllc_cdg = :cllc_cdg",
+            extras={"cllc_cdg": user.username}
+        )
+        if sql_cliente:
+            cursor.execute(sql_cliente, valores_cliente)
+            conn.commit()
+
         if data.miembros:
             miembros_dicts = []
             for m in data.miembros:
@@ -162,13 +241,14 @@ async def crear_ficha_socioeconomica(
                 )
             """
             cursor.executemany(sql, miembros_dicts)
+        
         # Preparar valores para SQL UPDATE
         campos_sql = []
         campos_sql.append("fis_pel_codigo = :fis_pel_codigo")
         campos_sql.append("fis_edad = :fis_edad")
         valores_sql = {"cllc_cdg": user.username, "fis_pel_codigo": periodo, 'fis_edad':edad}
 
-        for frontend_key, db_field in mapa_campos.items():
+        for frontend_key, db_field in mapeo_ficha.items():
             if "." in frontend_key:
                 main_key, sub_key = frontend_key.split(".")
                 nested_obj = getattr(data, main_key, None)
@@ -188,8 +268,6 @@ async def crear_ficha_socioeconomica(
             """
             cursor.execute(update_sql, valores_sql)
             conn.commit()
-        cursor.execute("""SELECT cllc_cdg FROM sigac.cliente_local where cllc_cdg = :cllc_cdg""", {'cllc_cdg':user.username})
-        row = cursor.fetchone()
         return {
             "message": "Ficha socioeconómica actualizada correctamente",
             "ficha": {"id": user.username},
@@ -252,7 +330,7 @@ async def get_ficha_socioeconomica(
         """, {"cllc_cdg": user.username, "pel_codigo": periodo})
         row = cursor.fetchone()
         beca = row[0] if row else ""
-
+        # Select para encontrar la carrera del estudiante
         cursor.execute("""
             SELECT ip.car_codigo_postgrado,prp_titulo_proyecto
             FROM sna.sna_inscripcion_postgrado ip,sna.sna_proyecto_postgrado pp
@@ -266,7 +344,7 @@ async def get_ficha_socioeconomica(
             AND  ROWNUM = 1
         """, {"cllc_cdg": user.username})
         row = cursor.fetchone()
-        carrera = {"id": str(row[0]), "nombre": row[1]} if row else {"id": None, "nombre": None}
+        carrera = {"id": str(row[0]), "nombre": row[1]} if row else {"id": "", "nombre": ""}
 
         # consulta colegio
         colegio = {"value": "", "label": ficha['fis_cole_graduo'] or "", "tipoValue": "", "tipoLabel": ficha['fis_cole_tipo'] or ""}
@@ -283,7 +361,7 @@ async def get_ficha_socioeconomica(
             "telefono": ficha["cllc_celular"],
             "colegio": colegio,
             "tipoColegio": ficha["fis_cole_tipo"] or 0,
-            "indigenaNacionalidad": ficha.get("nac_codigo", 34),
+            "indigenaNacionalidad": str(ficha.get("nac_codigo", 34)),
             "beca": beca,
             "carrera": carrera,
             "promedio": ficha["fis_calif_grado"] or 0,
@@ -291,6 +369,10 @@ async def get_ficha_socioeconomica(
             "etnia": ficha["fis_recono_etnico"] or "",
             "anioGraduacion": ficha["fis_especialidad"] or 2000,
             "semestre": str(ficha.get("fis_semestre_matricula",0)) or "",
+            "pais": {
+                "value": "999999",
+                "label": ficha["fis_pais_dom"] or ""
+            },
             "provincia": {
                 "value": "999999",
                 "label": ficha["fis_provincia"] or ""
@@ -302,7 +384,17 @@ async def get_ficha_socioeconomica(
             "parroquia": {
                 "value": "999999",
                 "label": ficha["fis_parroquia"] or ""
-            }
+            },
+            "tipoCasa":ficha['fis_casa'] or "",
+            "internet": ficha['fis_tiene_internet'],
+            "computadora": ficha['fis_tiene_compu'],
+            "origenRecursos": ficha['fis_orig_recur_sust'],
+            "origenEstudios": ficha['fis_orig_rec_est'],
+            "relacionCompa": ficha['fis_relac_companeros'],
+            "integracionUmet": ficha['fis_integrado_umet'],
+            "relacionDocente": ficha['fis_relac_docentes'],
+            "relacionPadres": ficha['fis_relac_padres'],
+            "relacionPareja": ficha['fis_relac_pareja'],
         }
         return {
             "message": "Ficha socioeconómica encontrada",
@@ -336,72 +428,6 @@ async def get_ficha_socioeconomica_pdf(
         
         # Convertir la fila a diccionario
         ficha = dict(zip([col[0].lower() for col in cursor.description], row))
-
-        try:
-            cursor.execute("""
-                SELECT 
-                    pais.area_nombre     AS pais,
-                    provincia.area_nombre AS provincia,
-                    canton.area_nombre    AS canton,
-                    parroquia.area_nombre AS parroquia
-                FROM easi.area_geografica pais
-                JOIN easi.area_geografica provincia 
-                    ON provincia.area_padre = pais.area_codigo
-                    AND provincia.area_codigo = :provincia
-                    AND provincia.area_tipo = 'PR'
-                JOIN easi.area_geografica canton 
-                    ON canton.area_padre = provincia.area_codigo
-                    AND canton.area_codigo = :canton
-                    AND canton.area_tipo = 'CI'
-                JOIN easi.area_geografica parroquia 
-                    ON parroquia.area_padre = canton.area_codigo
-                    AND parroquia.area_codigo = :parroquia
-                    AND parroquia.area_tipo = 'CM'
-                WHERE pais.area_tipo = 'PE'
-                AND pais.area_codigo = '593'
-                """, {'provincia': ficha['fis_provincia'], 'canton': ficha['fis_ciudad'], 'parroquia': ficha['fis_parroquia']}
-            )
-            residencia = cursor.fetchone()
-            pais, provincia, canton, parroquia = residencia
-            ficha['fis_provincia'] = provincia
-            ficha['fis_ciudad'] = canton
-            ficha['fis_parroquia'] = parroquia
-            
-        except Exception as e:
-            print(e)
-            pass
-
-        try:
-            cursor.execute("""
-                SELECT ie.ine_descripcion, tie.tie_descripcion
-                FROM sna.sna_institucion_educativa ie ,sna.sna_tipo_institucion_educativa tie
-                WHERE 
-                ie.ine_tipo_institucion <> 'UNIVERSIDAD'
-                and ie.tie_codigo=tie.tie_codigo
-                and ie.ine_codigo = :ine_codigo
-                and tie.tie_codigo = :tie_codigo
-                """, {'ine_codigo': ficha['fis_cole_graduo'], 'tie_codigo': ficha['fis_cole_tipo']}
-            )
-            colegio = cursor.fetchone()
-            colegio_name, colegio_tipo = colegio
-            ficha['fis_cole_graduo'] = colegio_name
-            ficha['fis_cole_tipo'] = colegio_tipo
-
-        except Exception as e:
-            pass
-        
-        try:
-            cursor.execute("""
-                select prp_titulo_proyecto
-                from sna.sna_inscripcion_postgrado ip,sna.sna_proyecto_postgrado pp
-                where ip.cllc_cdg= :cllc_cdg
-                and ip.prp_numero_postgrado=pp.prp_numero
-                and ip.car_codigo_postgrado = :carrera""", {'cllc_cdg': cllc_cdg, 'carrera': ficha['fis_carrera_matricula']}
-            )
-            carrera = cursor.fetchone()
-            ficha['fis_carrera_matricula'] = carrera[0]
-        except Exception as e:
-            pass
 
         cursor.execute("""
             SELECT * FROM sna.sna_miembros_hogar
@@ -512,8 +538,29 @@ def get_colegio(
         cursor.close()
 
 
+@router.get("/paises")
+def get_paises(
+    conn: cx_Oracle.Connection = Depends(get_connection)
+):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT area_nombre as label,area_codigo as value
+            FROM   easi.area_geografica
+            WHERE  area_tipo   = 'PE'
+        """)
+        rows = cursor.fetchall()
+        columns = [col[0].lower() for col in cursor.description]
+        provincias = [dict(zip(columns, row)) for row in rows]
+        return provincias
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo las provincias: {str(e)}")
+    finally:
+        cursor.close()
+
 @router.get("/provincias")
 def get_provincias(
+    paisId: int,
     conn: cx_Oracle.Connection = Depends(get_connection)
 ):
     try:
@@ -522,8 +569,8 @@ def get_provincias(
             SELECT area_nombre as label,area_codigo as value
             FROM   easi.area_geografica
             WHERE  area_tipo   = 'PR'
-            AND area_padre='593'
-        """)
+            AND area_padre = :pais
+        """, {'pais': paisId})
         rows = cursor.fetchall()
         columns = [col[0].lower() for col in cursor.description]
         provincias = [dict(zip(columns, row)) for row in rows]

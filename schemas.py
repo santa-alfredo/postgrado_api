@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from typing import Optional, Dict, Literal, List, Union
+from typing import Optional, Dict, Literal, List, Union, Any
 from datetime import date, datetime
 from pydantic.v1 import validator
 import re
@@ -84,27 +84,27 @@ class OtraUniversidad(BaseModel):
     razon: str = Field(..., min_length=2, max_length=100)
 
 class Empleado(BaseModel):
-    tipo: Literal["empleado"] = "empleado"
+    tipo: Literal["EMPLEADO"] = "EMPLEADO"
     empresa: str = Field(..., min_length=1, max_length=100)
     cargo: str = Field(..., min_length=1, max_length=100)
     sueldo: str = Field(..., min_length=1, max_length=100)
 
 class NegocioPropio(BaseModel):
-    tipo: Literal["negocio propio"] = "negocio propio"
+    tipo: Literal["NEGOCIO"] = "NEGOCIO"
     negocio: str = Field(..., min_length=2, max_length=100)
     actividades: str = Field(..., min_length=2, max_length=100)
 
 class Pensionado(BaseModel):
-    tipo: Literal["pensionado"] = "pensionado"
+    tipo: Literal["PENSIONADO"] = "PENSIONADO"
     fuente: str = Field(..., min_length=2, max_length=100)
     monto: float = Field(..., ge=0)
 
 class OtroLaboral(BaseModel):
-    tipo: Literal["otro"] = "otro"
+    tipo: Literal["OTRO"] = "OTRO"
     descripcion: str = Field(..., min_length=2, max_length=100)
 
 class Desempleado(BaseModel):
-    tipo: Literal["desempleado"] = "desempleado"
+    tipo: Literal["DESEMPLEADO"] = "DESEMPLEADO"
     dependiente: Literal["padre", "madre", "hermano", "otro"]
 
 class MiembroFamiliar(BaseModel):
@@ -114,9 +114,10 @@ class MiembroFamiliar(BaseModel):
     ocupacion: Optional[str] = None
 
 class Discapacidad(BaseModel):
-    tipo: Literal["fisica", "psiquica", "auditiva", "visual", "intelectual", "multiple"]
+    tipo: Literal["FISICA", "PSIQUICA", "AUDITIVA", "VISUAL", "INTELECTUAL", "MULTIPLE"]
     porcentaje: int = Field(..., ge=10, le=100)
     carnet: str = Field(...)
+    tieneDiagnosticoPresuntivo: str = Field(...)
 
 class EnfermedadCronica(BaseModel):
     nombre: str = Field(...)
@@ -142,15 +143,18 @@ class FichaSocioeconomicaSchema(BaseModel):
     cedula: str = Field(..., min_length=10, max_length=13)
     fechaNacimiento: Optional[date] = None
     genero: str = Field(...)
+    generoIdentidad: str = Field(...)
+    orientacionSexual: str = Field(...)
     estadoCivil: str = Field(..., max_length=20)
     telefono: Optional[str] = Field(None, min_length=10, max_length=15)
     email: str = Field(...)
     nacionalidad: str = Field(..., max_length=30)
     cambioResidencia: Optional[str] = "N"
     direccion: str = Field(..., min_length=10, max_length=200)
-    provincia: SelectOption
-    ciudad: SelectOption
-    parroquia: SelectOption
+    pais: Optional[SelectOption] = None
+    provincia: Optional[SelectOption] = None
+    ciudad: Optional[SelectOption] = None
+    parroquia: Optional[SelectOption] = None
     carrera: str = Field(..., min_length=2, max_length=100)
     colegio: Colegio = Field(...)
     anioGraduacion: int = Field(..., ge=1900, le=2025)
@@ -167,15 +171,15 @@ class FichaSocioeconomicaSchema(BaseModel):
     transporte: str = ""
     alimentacion: str = ""
     otrosGastos: str = ""
-    situacionLaboral: Literal["empleado", "desempleado", "negocio propio", "pensionado", "otro"]
+    situacionLaboral: Literal["EMPLEADO", "DESEMPLEADO", "NEGOCIO", "PENSIONADO", "OTRO"]
     trabaja: Optional[str] = 'N'
     laboral: Optional[Union[Empleado, NegocioPropio, Pensionado, OtroLaboral, Desempleado]] = None
     dependenciaEconomica: Literal["S", "N"] = "N"
-    relacionCompa: Literal["excelente", "buena", "regular", "mala"]
+    relacionCompa: Literal["EXCELENTE", "BUENA", "REGULAR", "MALA"]
     integracionUmet: Literal["S", "N"]
-    relacionDocente: Literal["excelente", "buena", "regular", "mala"]
-    relacionPadres: Literal["excelente", "buena", "regular", "mala"]
-    relacionPareja: Optional[Literal["excelente", "buena", "regular", "mala"]] = None
+    relacionDocente: Literal["EXCELENTE", "BUENA", "REGULAR", "MALA"]
+    relacionPadres: Literal["EXCELENTE", "BUENA", "REGULAR", "MALA"]
+    relacionPareja: Optional[Literal["EXCELENTE", "BUENA", "REGULAR", "MALA"]] = None
     
     tipoCasa: Optional[str] = ""
     estadoFamiliar: Literal["cabezaHogar", "familia", "independiente"]
@@ -199,7 +203,11 @@ class FichaSocioeconomicaSchema(BaseModel):
     tieneEnfermedadCronica: Literal["S", "N"]
     enfermedadCronica: Optional[EnfermedadCronica] = None
     etnia: Optional[str] = None
-    indigenaNacionalidad: Optional[int] = None
+    indigenaNacionalidad: Optional[int] = 0
+
+    contactoParentesco: Optional[str] = None
+    contactoNombre: Optional[str] = None
+    contactoCelular: Optional[str] = None
 
     @validator("telefono")
     def validate_telefono(cls, v):
@@ -221,12 +229,28 @@ class FichaSocioeconomicaSchema(BaseModel):
     
     @model_validator(mode="after")
     def set_dependencia_economica(cls, model):
-        if model.situacionLaboral == "desempleado":
+        if model.situacionLaboral == "DESEMPLEADO":
             model.dependenciaEconomica = "S"
             model.trabaja = 'N'
         elif model.dependenciaEconomica is None:
             model.dependenciaEconomica = "N"
             model.trabaja = 'S'
+        return model
+    
+    @model_validator(mode="after")
+    def set_nac_codigo(cls, model):
+        if model.etnia != "IND":
+            model.indigenaNacionalidad = 0
+        return model
+    
+    @model_validator(mode="after")
+    def campos_uppercase(cls, model):
+        if model.direccion:
+            model.direccion = model.direccion.strip().upper()
+        if model.contactoNombre:
+            model.contactoNombre = model.contactoNombre.strip().upper()
+        if model.contactoParentesco:
+            model.contactoParentesco = model.contactoParentesco.strip().upper()
         return model
     
     @model_validator(mode="after")

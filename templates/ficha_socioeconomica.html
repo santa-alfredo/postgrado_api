@@ -220,16 +220,14 @@
     <div class="section">
         <div class="section-title">Información Académica</div>
         <div class="subsection-title">Educación Secundaria</div>
+        <div class="field"><span class="field-label">Institución:</span><span class="field-value">{{ficha.fis_cole_graduo}}</span></div>
         <div class="info-grid">
             <div class="field"><span class="field-label">Año de Graduación:</span><span class="field-value">{{ficha.fis_especialidad}}</span></div>
-            <div class="field"><span class="field-label">Institución:</span><span class="field-value">{{ficha.fis_cole_graduo}}</span></div>
             <div class="field"><span class="field-label">Calificación Grado:</span><span class="field-value">{{ficha.fis_calif_grado}}</span></div>
         </div>
         <div class="subsection-title">Universidad UMET</div>
-        <div class="info-grid">
-            <div class="field"><span class="field-label">Semestre:</span><span class="field-value">{{ficha.fis_semestre_matricula}}</span></div>
-            <div class="field"><span class="field-label">Carrera:</span><span class="field-value">{{ficha.fis_carrera_matricula}}</span></div>
-        </div>
+        <div class="field"><span class="field-label">Carrera:</span><span class="field-value">{{ficha.fis_carrera_matricula}}</span></div>
+        <div class="field"><span class="field-label">Semestre:</span><span class="field-value">{{ficha.fis_semestre_matricula}}</span></div>
     </div>
 
     <!-- Información Adicional -->
@@ -237,7 +235,11 @@
         <div class="section-title">Información Adicional</div>
         <div class="info-grid">
             <div class="field"><span class="field-label">Cambio de Residencia:</span><span class="field-value">{{ficha.fis_tuvo_camb_resi}}</span></div>
-            <div class="field"><span class="field-label">Cambio de Universidad:</span><span class="field-value">{{ficha.fis_est_otr_u}}</span></div>
+            <div class="field">
+                <span class="field-label">Cambio de Universidad:</span><span class="field-value">
+                    {{ "Sí" if ficha.fis_est_otr_u in ["S", 1, True] else "No" }}
+                </span>
+            </div>
             <div class="field"><span class="field-label">Vive con:</span><span class="field-value">{{ficha.fis_vive_con}}</span></div>
             <div class="field"><span class="field-label">Vivienda:</span><span class="field-value">{{ficha.fis_casa}}</span></div>
             <div class="field"><span class="field-label">Internet en casa:</span><span class="field-value">{{ficha.fis_tiene_internet}}</span></div>
